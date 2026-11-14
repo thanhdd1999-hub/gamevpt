@@ -30,7 +30,6 @@ func (h *Handler) RegisterHandlers(dispatcher *rtmp.RPCDispatcher) {
 		"submitAddict",
 		"callGm",
 		"shopClosePanel",
-		"getLimitTimeShop",
 		"product",
 		"uc",
 		"gtg",

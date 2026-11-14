@@ -144,8 +144,10 @@ func (s *shopService) RefreshVIPShopConfig(ctx context.Context, characterID int6
 
 func (s *shopService) BuyVIPShopItem(ctx context.Context, characterID int64, shopSlotID, amount int) (*VIPShopPurchaseResult, error) {
 	if amount != 1 {
-		amount = 1
+		return nil, fmt.Errorf("vip shop purchase quantity must be one")
 	}
+	s.purchaseMu.Lock()
+	defer s.purchaseMu.Unlock()
 	if err := s.requireVIPShopDeps(); err != nil {
 		return nil, err
 	}
@@ -181,15 +183,7 @@ func (s *shopService) BuyVIPShopItem(ctx context.Context, characterID int64, sho
 		return nil, fmt.Errorf("shop slot %d not found", shopSlotID)
 	}
 
-	inserted, err := s.vipShopRepo.RecordPurchase(ctx, characterID, rotation.RotationEpoch, int32(shopSlotID), int32(amount))
-	if err != nil {
-		return nil, err
-	}
-	if !inserted {
-		return nil, ErrVIPShopSlotAlreadyPurchased
-	}
-
-	purchase, err := s.buyVIPSlotItem(ctx, char, slot, amount, now)
+	purchase, err := s.buyVIPSlotItem(ctx, char, slot, amount, now, rotation.RotationEpoch)
 	if err != nil {
 		return nil, err
 	}
@@ -319,4 +313,3 @@ func vipShopDayBucket(now time.Time) time.Time {
 	local := now.In(models.GameTimezone)
 	return time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, models.GameTimezone)
 }
-

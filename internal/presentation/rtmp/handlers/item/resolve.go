@@ -97,7 +97,7 @@ func (h *Handler) EquResolve(ctx *rtmp.RPCContext, args []interface{}) (interfac
 				zap.Error(addErr))
 			continue
 		}
-		ctx.Connection.SendCallback("onAddCharactorSlot", h.itemDTO(addedItem))
+		h.sendSlotUpdate(ctx, h.itemDTO(addedItem))
 	}
 
 	if _, err := h.itemService.DropItem(ctx.Context, characterID, equipmentID); err != nil {

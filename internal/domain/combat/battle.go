@@ -127,7 +127,7 @@ type Participant struct {
 	PetColor      int
 
 	DeathImmuneUsed bool
-	EffStats         stats.EffectiveStats
+	EffStats        stats.EffectiveStats
 }
 
 func NewParticipant(id, name string, side Side, isNPC bool) *Participant {

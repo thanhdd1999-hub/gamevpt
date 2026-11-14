@@ -3,6 +3,7 @@
 package pet
 
 import (
+	domainitem "mcgame-server/internal/domain/item"
 	domainpet "mcgame-server/internal/domain/pet"
 	"mcgame-server/internal/infrastructure/rtmp"
 	rtmputils "mcgame-server/internal/presentation/rtmp/utils"
@@ -76,11 +77,10 @@ func (h *Handler) EnsurePetEat(ctx *rtmp.RPCContext, args []interface{}) (interf
 }
 
 func (h *Handler) PetStar(ctx *rtmp.RPCContext, args []interface{}) (interface{}, error) {
-	if err := requireArgs(args, 1); err != nil {
-		return nil, err
+	if len(args) < 2 {
+		return map[string]interface{}{"flag": false}, nil
 	}
-
-	characterID, err := currentCharacterID(ctx)
+	charID, err := currentCharacterID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -88,23 +88,67 @@ func (h *Handler) PetStar(ctx *rtmp.RPCContext, args []interface{}) (interface{}
 	if err != nil {
 		return nil, err
 	}
-
-	p, err := h.petService.UpgradeStar(ctx.Context, characterID, petID)
+	stoneID, err := parseInt64Arg(args[1])
 	if err != nil {
-		return rtmp.ErrorToResponse(err), nil
+		return nil, err
 	}
-
-	h.logger.Info("Pet star upgraded",
-		zap.Int64("character_id", characterID),
-		zap.Int64("pet_id", petID),
-		zap.Int("stars", p.UpgradeNum))
-
-	return map[string]interface{}{
-		"success": true,
-		"pet":     p.ToDTO(),
-	}, nil
+	var protectID int64
+	if len(args) > 2 && args[2] != nil {
+		protectID, err = parseInt64Arg(args[2])
+		if err != nil {
+			return nil, err
+		}
+	}
+	result, err := h.petService.AttemptPetStar(ctx.Context, charID, petID, stoneID, protectID)
+	if err != nil {
+		h.logger.Warn("Pet star rejected", zap.Int64("character_id", charID), zap.Int64("pet_id", petID), zap.Error(err))
+		if ctx.Connection != nil {
+			_ = ctx.Connection.SendCallback("onSystemMidMsgOrNote", "Không thể thăng sao: kiểm tra nội đơn, trạng thái khóa và giới hạn 12 sao. Không tiêu hao vật phẩm.")
+		}
+		response := map[string]interface{}{"flag": false, "petId": float64(petID), "starSlotId": float64(stoneID)}
+		if p, e := h.petService.GetPetDetail(ctx.Context, charID, petID); e == nil && p != nil {
+			response["starNum"] = p.UpgradeNum
+			response["growRateAdd"] = p.GrowRateAdd
+		}
+		if h.petService != nil {
+			if it, e := h.petService.GetOwnedPetItem(ctx.Context, charID, stoneID); e == nil && it != nil {
+				response["num"] = it.StackCount
+			}
+			if protectID > 0 {
+				if it, e := h.petService.GetOwnedPetItem(ctx.Context, charID, protectID); e == nil && it != nil {
+					response["starSafeNum"] = it.StackCount
+				}
+			}
+		}
+		return response, nil
+	}
+	if ctx.Connection != nil {
+		for _, it := range []*domainitem.Item{result.Stone, result.Protection} {
+			if it == nil {
+				continue
+			}
+			if it.StackCount == 0 {
+				_ = ctx.Connection.SendCallback("onDelCharactorSlot", float64(it.ID), float64(it.CalculateSID()))
+			} else {
+				dto := it.ToDTO()
+				if h.petService != nil {
+					dto = it.ToDTO()
+				}
+				_ = ctx.Connection.SendCallback("onCreateItemInstance", dto)
+				_ = ctx.Connection.SendCallback("onAddCharactorSlot", dto)
+			}
+		}
+		_ = ctx.Connection.SendCallback("onUpdatePet", float64(result.Pet.ID), "upgradeNum", result.Pet.UpgradeNum)
+		_ = ctx.Connection.SendCallback("onUpdatePet", float64(result.Pet.ID), "growRateAdd", result.Pet.GrowRateAdd)
+		sendPetPropRefresh(ctx, result.Pet)
+	}
+	safeNum := 0
+	if result.Protection != nil {
+		safeNum = result.Protection.StackCount
+	}
+	h.logger.Info("Pet star attempt committed", zap.Int64("character_id", charID), zap.Int64("pet_id", petID), zap.Bool("success", result.Success), zap.Int("stars", result.Pet.UpgradeNum))
+	return map[string]interface{}{"flag": result.Success, "petId": float64(result.Pet.ID), "starNum": result.Pet.UpgradeNum, "growRateAdd": result.Pet.GrowRateAdd, "starSlotId": float64(result.Stone.ID), "num": result.Stone.StackCount, "starSafeNum": safeNum}, nil
 }
-
 func (h *Handler) ContractPet(ctx *rtmp.RPCContext, args []interface{}) (interface{}, error) {
 	if err := requireArgs(args, 1); err != nil {
 		return nil, err
@@ -165,94 +209,11 @@ func (h *Handler) PetStarClear(ctx *rtmp.RPCContext, args []interface{}) (interf
 }
 
 func (h *Handler) ToPetFeather(ctx *rtmp.RPCContext, args []interface{}) (interface{}, error) {
-	if err := requireArgs(args, 1); err != nil {
-		return nil, err
-	}
-
-	characterID, err := currentCharacterID(ctx)
-	if err != nil {
-		return nil, err
-	}
-	petID, err := parseInt64Arg(args[0])
-	if err != nil {
-		return nil, err
-	}
-
-	materialIDs := []int64{}
-	if len(args) >= 2 {
-		materialIDs = parseInt64SliceArg(args[1])
-	}
-
-	p, err := h.petService.FeatherUpgrade(ctx.Context, characterID, petID, materialIDs)
-	if err != nil {
-		return rtmp.ErrorToResponse(err), nil
-	}
-
-	h.logger.Info("Pet feather upgrade started",
-		zap.Int64("character_id", characterID),
-		zap.Int64("pet_id", petID))
-
-	return map[string]interface{}{
-		"success": true,
-		"pet":     p.ToDetailDTO(),
-	}, nil
+	return h.petEvolutionAction(ctx, args, 0)
 }
-
 func (h *Handler) ToPetFeatherNextStep(ctx *rtmp.RPCContext, args []interface{}) (interface{}, error) {
-	if err := requireArgs(args, 1); err != nil {
-		return nil, err
-	}
-
-	characterID, err := currentCharacterID(ctx)
-	if err != nil {
-		return nil, err
-	}
-	petID, err := parseInt64Arg(args[0])
-	if err != nil {
-		return nil, err
-	}
-
-	p, err := h.petService.FeatherNextStep(ctx.Context, characterID, petID)
-	if err != nil {
-		return rtmp.ErrorToResponse(err), nil
-	}
-
-	h.logger.Info("Pet feather upgrade completed",
-		zap.Int64("character_id", characterID),
-		zap.Int64("pet_id", petID))
-
-	return map[string]interface{}{
-		"success": true,
-		"pet":     p.ToDetailDTO(),
-	}, nil
+	return h.petEvolutionAction(ctx, args, 1)
 }
-
 func (h *Handler) ToPetEnvolution(ctx *rtmp.RPCContext, args []interface{}) (interface{}, error) {
-	if err := requireArgs(args, 1); err != nil {
-		return nil, err
-	}
-
-	characterID, err := currentCharacterID(ctx)
-	if err != nil {
-		return nil, err
-	}
-	petID, err := parseInt64Arg(args[0])
-	if err != nil {
-		return nil, err
-	}
-
-	p, err := h.petService.EvolvePet(ctx.Context, characterID, petID)
-	if err != nil {
-		return rtmp.ErrorToResponse(err), nil
-	}
-
-	h.logger.Info("Pet evolved",
-		zap.Int64("character_id", characterID),
-		zap.Int64("pet_id", petID),
-		zap.Int("evolution_level", p.EvolutionLv))
-
-	return map[string]interface{}{
-		"success": true,
-		"pet":     p.ToDetailDTO(),
-	}, nil
+	return h.petEvolutionAction(ctx, args, 2)
 }

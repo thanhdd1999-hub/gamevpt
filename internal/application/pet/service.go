@@ -706,6 +706,8 @@ func (s *Service) OpenPetSlot(ctx context.Context, charID int64) (int, int, stri
 	if char == nil {
 		return 0, 0, "", 0, pkgerrors.ErrNotFound
 	}
+	copyChar := *char
+	char = &copyChar
 	char.NormalizeSlotFields()
 
 	currentSlots := char.PetMaxNum
@@ -791,6 +793,7 @@ func consumePetSlotCurrency(char *character.Character, cost int) (string, int64,
 	}
 	if char.Gold >= c {
 		char.Gold -= c
+		char.AwardSystemGoldSpend(c)
 		return "gold", char.Gold, nil
 	}
 	return "", 0, pkgerrors.ErrInsufficientFunds

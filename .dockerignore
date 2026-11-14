@@ -33,3 +33,12 @@ docs/tools/
 # Local config
 *.local.*
 .env
+
+# Client assets and runtime state are mounted separately.
+frontend/
+dashboard/
+docs/client/
+docs/flashplayer/
+docker/volumes/db/data/
+docker/volumes/storage/
+temp/

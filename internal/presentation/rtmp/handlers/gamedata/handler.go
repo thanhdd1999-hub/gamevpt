@@ -6,6 +6,7 @@ package gamedata
 import (
 	appguild "mcgame-server/internal/application/guild"
 	appitem "mcgame-server/internal/application/item"
+	apppet "mcgame-server/internal/application/pet"
 	gamedatamanager "mcgame-server/internal/gamedata"
 	"mcgame-server/internal/infrastructure/rtmp"
 
@@ -16,8 +17,11 @@ type Handler struct {
 	gameData     *gamedatamanager.Manager
 	guildService *appguild.Service
 	itemService  *appitem.Service
+	petService   *apppet.Service
 	logger       *zap.Logger
 }
+
+func (h *Handler) SetPetService(s *apppet.Service) { h.petService = s }
 
 func NewHandler(gameData *gamedatamanager.Manager, itemService *appitem.Service, logger *zap.Logger) *Handler {
 	return &Handler{

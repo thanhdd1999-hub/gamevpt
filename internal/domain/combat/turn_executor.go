@@ -73,7 +73,7 @@ func (tp *TurnProcessor) executeAttack(actor *Participant, cmd *BattleCommand) [
 		zap.String("actor_id", actor.ID),
 		zap.String("target_id", cmd.TargetID))
 
-	target := tp.resolveTarget(actor, cmd.TargetID)
+	target := tp.resolveAttackTarget(actor, cmd.TargetID)
 	if target == nil {
 		return []*BattleAction{
 			{

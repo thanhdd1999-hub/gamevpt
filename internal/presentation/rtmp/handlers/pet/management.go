@@ -3,7 +3,6 @@
 package pet
 
 import (
-	"fmt"
 	"strconv"
 
 	domainpet "mcgame-server/internal/domain/pet"
@@ -54,7 +53,12 @@ func (h *Handler) PetOpenSlot(ctx *rtmp.RPCContext, args []interface{}) (interfa
 
 	_ = ctx.Connection.SendCallback("onMinusMoney", float64(characterID), currencyType, float64(cost), float64(remaining))
 	_ = ctx.Connection.SendCallback("onUPP", map[string]interface{}{"petMaxNum": newSlotCount})
-	_ = ctx.Connection.SendCallback("onSystemSay", fmt.Sprintf("Mất %d kim phiếu", cost))
+	if currencyType == "gold" {
+		exp, level, err := h.petService.GetSpendingPMState(ctx.Context, characterID)
+		if err == nil && level > 0 {
+			utils.SendPMGoldSpendUpdate(ctx, int64(cost), exp, level)
+		}
+	}
 
 	h.logger.Info("Pet slot opened",
 		zap.Int64("character_id", characterID),

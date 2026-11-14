@@ -528,7 +528,7 @@ func (h *Handler) SureChangePrefix(ctx *rtmp.RPCContext, args []interface{}) (in
 		if deleted {
 			ctx.Connection.SendCallback("onDelCharactorSlot", float64(consumedItem.ID), float64(consumedItem.CalculateSID()))
 		} else {
-			ctx.Connection.SendCallback("onAddCharactorSlot", h.itemDTO(consumedItem))
+			h.sendSlotUpdate(ctx, h.itemDTO(consumedItem))
 		}
 	}
 
@@ -539,7 +539,7 @@ func (h *Handler) SureChangePrefix(ctx *rtmp.RPCContext, args []interface{}) (in
 
 	h.clearPendingChangePrefix(characterID)
 
-	ctx.Connection.SendCallback("onAddCharactorSlot", h.itemDTO(updatedEquipment))
+	h.sendSlotUpdate(ctx, h.itemDTO(updatedEquipment))
 	ctx.Connection.SendCallback("onUPP", charMoneyUpdatePayload(char))
 	if updatedEquipment.IsEquipped() {
 		if updatedChar, charErr := h.charService.GetByID(ctx.Context, characterID); charErr == nil && updatedChar != nil {

@@ -4,6 +4,8 @@ package shop
 
 // BuyResult contains the result of a shop item purchase
 type BuyResult struct {
+	PMExpDelta    int64                    `json:"pmExpDelta"`
+	Balances      map[string]interface{}   `json:"balances"`
 	NewMoney      int64                    `json:"newMoney"`
 	Cost          int64                    `json:"cost"`
 	CurrencyType  int                      `json:"currencyType"`
@@ -50,6 +52,8 @@ type PurchaseRequest struct {
 
 // BuySystemItemMultiResult contains the result of buying multiple system shop items
 type BuySystemItemMultiResult struct {
+	PMExpDelta    int64                    `json:"pmExpDelta"`
+	Balances      map[string]interface{}   `json:"balances"`
 	Success       bool                     `json:"success"`
 	Items         []map[string]interface{} `json:"items"`
 	NewMoney      int64                    `json:"newMoney"`

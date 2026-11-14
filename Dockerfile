@@ -18,7 +18,8 @@ COPY . .
 # -s: omit symbol table, -w: omit DWARF debug info
 RUN CGO_ENABLED=0 GOOS=linux go build \
     -ldflags="-s -w" \
-    -o /gameserver ./cmd/gameserver
+    -o /gameserver ./cmd/gameserver \
+    && test -s /gameserver
 
 # Runtime stage - scratch is the smallest possible base (0 bytes)
 FROM scratch

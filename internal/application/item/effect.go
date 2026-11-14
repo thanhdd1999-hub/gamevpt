@@ -16,6 +16,7 @@ import (
 )
 
 type UseContext struct {
+	BookPrepared   bool
 	TargetType     int
 	TargetID       int64
 	PetID          int64
@@ -45,6 +46,7 @@ type ItemEffectResult struct {
 	Message              string
 	ConsumeItem          bool
 	RefreshCharacterView bool
+	CharacterUpdates     map[string]interface{}
 }
 
 type GrantedMedalResult struct {

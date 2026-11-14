@@ -1,5 +1,9 @@
 # VIP Shop
 
+## Failed Purchase Recovery (2026-11-14)
+
+VIP slot purchase markers are now written last, after inventory grant and wallet persistence succeed. The shared purchase mutex serializes local attempts. Wallet calculations use a copied character; failure to record the marker restores the prior wallet, and GrantBagRewards compensates inventory. Low funds or a full bag therefore leaves the listing available for retry. VIP requests must specify quantity one and a valid positive finite price. Explicit catalog type controls item classification. Tests cover retry after low funds/full bag, wallet/marker failures, duplicate commit rejection, invalid quantities/prices, success and stack updates. Wallet-rollback failure during a database outage remains an explicit error, not an atomicity guarantee.
+
 ## Wire Contract (Flash client expects, unchanged)
 
 The Flash VIP shop panel uses direct responder results, not named callbacks, for its main RPC payloads.

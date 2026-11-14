@@ -128,7 +128,7 @@ func (h *Handler) ChangeBind(ctx *rtmp.RPCContext, args []interface{}) (interfac
 	if deleted {
 		ctx.Connection.SendCallback("onDelCharactorSlot", float64(consumedItem.ID), float64(consumedItem.CalculateSID()))
 	} else {
-		ctx.Connection.SendCallback("onAddCharactorSlot", h.itemDTO(consumedItem))
+		h.sendSlotUpdate(ctx, h.itemDTO(consumedItem))
 	}
 
 	charDeductMoney(char, changeBindMoneyCost)
@@ -205,7 +205,7 @@ func (h *Handler) SureChangeBind(ctx *rtmp.RPCContext, args []interface{}) (inte
 		return map[string]interface{}{"f": "false"}, nil
 	}
 
-	ctx.Connection.SendCallback("onAddCharactorSlot", h.itemDTO(updatedEquipment))
+	h.sendSlotUpdate(ctx, h.itemDTO(updatedEquipment))
 	if updatedEquipment.IsEquipped() {
 		ctx.Connection.SendCallback("onEquipActiveList", h.itemService.BuildEquipActiveList(ctx.Context, characterID))
 		if ch, chErr := h.charService.GetByID(ctx.Context, characterID); chErr == nil && ch != nil {

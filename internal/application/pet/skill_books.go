@@ -50,6 +50,7 @@ type PetSkillBookResult struct {
 	SlotKey        string
 	SkillID        int
 	RemainingStack int
+	ConsumedItem   *domainitem.Item
 }
 
 type petSkillRequirements struct {
@@ -58,6 +59,9 @@ type petSkillRequirements struct {
 }
 
 func (s *Service) LearnSkillFromBook(ctx context.Context, charID int64, petID int64, bookItemID int64) (*PetSkillBookResult, error) {
+	petMutationMu.Lock()
+	defer petMutationMu.Unlock()
+
 	if s.itemRepo == nil || s.gameDataManager == nil {
 		return nil, pkgerrors.ErrSystemError
 	}
@@ -135,6 +139,7 @@ func (s *Service) LearnSkillFromBook(ctx context.Context, charID int64, petID in
 		SlotKey:        petSkillSlotKey(slot),
 		SkillID:        skillTemplate.GetID(),
 		RemainingStack: remainingStack,
+		ConsumedItem:   func() *domainitem.Item { copyItem := *bookItem; copyItem.StackCount = remainingStack; return &copyItem }(),
 	}, nil
 }
 

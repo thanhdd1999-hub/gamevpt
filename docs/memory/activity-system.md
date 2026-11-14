@@ -1,5 +1,13 @@
 # Activity System
 
+## Send Combine Inventory Repair (2026-11-14)
+
+The local account audit confirmed five completed package-0 purchases at 6999 gold each. Inventory contained the expected 50 bound template-6861 boxes and 5 bound template-408 pills; template-5351 shards increased by 35 in an existing stack. The invisible reward was a wire-format bug: BuySendCombine sent raw domain Item pointers instead of client slot DTOs.
+
+Purchases now validate aggregate bag capacity before granting, calculate payment on a character copy, and use GrantBagRewards with a currency-commit callback. Failed grants or failed currency commit trigger compensation of new items and changed stacks. Only after success is the buy count incremented. All changed stacks are returned, including multiple-stack overflow, and published as flat BuildClientItemDTO payloads through onCreateItemInstance and onAddCharactorSlot. Explicit reward table type selects equipment versus item catalog, avoiding template-ID collisions between catalogs. A purchase mutex serializes this handler's check/grant/count flow.
+
+This is best-effort compensation within the existing repositories, not a new database transaction or a durable recovery ledger. A database outage during compensation, cross-handler concurrent inventory changes, and quest side effects from partial grants remain architectural limits. Purchase-count state still resets on process restart as described below.
+
 ## Send Combine And Boss Daily Activity Buttons
 
 The "Sao Lap Lanh" activity icon is controlled by `startedActList`, while panel content is loaded by `getSendCombineAct`.

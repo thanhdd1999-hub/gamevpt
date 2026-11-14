@@ -18,3 +18,5 @@ temp/exported-resources/
 .worktrees/
 dashboard/tsconfig.tsbuildinfo
 .antigravitycli
+# Local audit snapshots and database credentials must stay local.
+tmp/

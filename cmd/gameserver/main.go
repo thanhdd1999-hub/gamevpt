@@ -792,6 +792,7 @@ func runGameServer(cfg *config.Config, log *zap.Logger, mode config.ServerMode) 
 
 	gamedataHandler := gamedatahandler.NewHandler(gameDataManager, itemService, log)
 	gamedataHandler.SetGuildService(guildService)
+	gamedataHandler.SetPetService(petService)
 	gamedataHandler.RegisterHandlers(dispatcher)
 
 	charHandler := characterhandler.NewHandler(charService, log)

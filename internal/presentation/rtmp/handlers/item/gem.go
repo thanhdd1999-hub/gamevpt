@@ -121,7 +121,7 @@ func (h *Handler) JewelSet(ctx *rtmp.RPCContext, args []interface{}) (interface{
 		if deleted {
 			ctx.Connection.SendCallback("onDelCharactorSlot", float64(consumedItem.ID), float64(oldSID))
 		} else {
-			ctx.Connection.SendCallback("onAddCharactorSlot", h.itemDTO(consumedItem))
+			h.sendSlotUpdate(ctx, h.itemDTO(consumedItem))
 		}
 
 		gemsToSet[slotIndex] = gemItem.TemplateID
@@ -135,7 +135,7 @@ func (h *Handler) JewelSet(ctx *rtmp.RPCContext, args []interface{}) (interface{
 		} else {
 			equipItem = updatedEquip
 		}
-		ctx.Connection.SendCallback("onAddCharactorSlot", h.itemDTO(equipItem))
+		h.sendSlotUpdate(ctx, h.itemDTO(equipItem))
 	}
 
 	return successCount, nil
@@ -206,10 +206,10 @@ func (h *Handler) JewelDel(ctx *rtmp.RPCContext, args []interface{}) (interface{
 	if err != nil {
 		h.logger.Error("JewelDel: failed to return gem to inventory", zap.Error(err))
 	} else {
-		ctx.Connection.SendCallback("onAddCharactorSlot", h.itemDTO(returnedGem))
+		h.sendSlotUpdate(ctx, h.itemDTO(returnedGem))
 	}
 
-	ctx.Connection.SendCallback("onAddCharactorSlot", h.itemDTO(updatedEquip))
+	h.sendSlotUpdate(ctx, h.itemDTO(updatedEquip))
 
 	h.checkBagCapacityWarning(ctx, characterID)
 

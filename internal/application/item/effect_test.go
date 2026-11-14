@@ -291,14 +291,8 @@ func TestBuffHandler_Apply(t *testing.T) {
 	tpl := &models.ItemTemplateTemplate{ID: 100, UseType: 2, Name: "Thuốc Tăng Lực"}
 
 	result, err := h.Apply(ctx, nil, char, it, tpl)
-	if err != nil {
-		t.Fatalf("Apply() error = %v", err)
-	}
-	if !result.ConsumeItem {
-		t.Fatal("expected ConsumeItem=true")
-	}
-	if result.Message != "Đã sử dụng Thuốc Tăng Lực" {
-		t.Fatalf("unexpected message: %q", result.Message)
+	if err == nil || result != nil {
+		t.Fatal("unsupported buff must not be consumed")
 	}
 }
 
@@ -315,11 +309,8 @@ func TestDefaultHandler_AlwaysHandles(t *testing.T) {
 	it := &domainitem.Item{ID: 1, TemplateID: 1}
 
 	result, err := h.Apply(ctx, nil, char, it, tpl)
-	if err != nil {
-		t.Fatalf("Apply() error = %v", err)
-	}
-	if !result.ConsumeItem {
-		t.Fatal("expected ConsumeItem=true")
+	if err == nil || result != nil {
+		t.Fatal("unsupported item must not be consumed")
 	}
 }
 

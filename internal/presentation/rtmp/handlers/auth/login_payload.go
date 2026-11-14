@@ -200,7 +200,7 @@ func (h *Handler) buildOnChooseCharactorPayload(ctx context.Context, char *chara
 		"mpMax":               mpMax,
 		"spMax":               spMax,
 		"pmLevel":             pmLevel,
-		"ep":                  "|0|0|0|0",
+		"ep":                  char.BloodBagString(),
 		"vipT":                -1,
 		"attStrength":         strconv.Itoa(char.Strength),
 		"attAgility":          strconv.Itoa(char.Agility),

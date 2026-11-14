@@ -104,8 +104,9 @@ func (h *Handler) BuyVipShopItem(ctx *rtmp.RPCContext, args []interface{}) (inte
 
 	shopSlotID := parseIntVal(args[0])
 	amount := parseIntVal(args[1])
-	if amount <= 0 {
-		amount = 1
+	if amount != 1 {
+		_ = ctx.Connection.SendCallback("onRedMsg", "Shop VIP chỉ cho phép mua một vật phẩm mỗi lần.")
+		return vipShopBuyFailure(), nil
 	}
 
 	result, err := h.shopService.BuyVIPShopItem(ctx.Context, charID, shopSlotID, amount)
@@ -121,10 +122,7 @@ func (h *Handler) BuyVipShopItem(ctx *rtmp.RPCContext, args []interface{}) (inte
 		_ = ctx.Connection.SendCallback("onAddItem", result.Purchase.ItemData)
 		sendPurchaseSlotUpdates(ctx, result.Purchase)
 
-		currencyKey := getCurrencyKey(result.Purchase.CurrencyType)
-		if currencyKey != "" {
-			_ = ctx.Connection.SendCallback("onUPP", map[string]interface{}{currencyKey: result.Purchase.NewMoney})
-		}
+		sendPurchaseWalletUpdates(ctx, result.Purchase)
 	}
 
 	h.checkQuestUpdates(ctx, charID)

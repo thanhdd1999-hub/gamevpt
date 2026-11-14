@@ -297,7 +297,7 @@ func (h *Handler) ChangeLevel(ctx *rtmp.RPCContext, args []interface{}) (interfa
 		if deleted {
 			ctx.Connection.SendCallback("onDelCharactorSlot", float64(consumedItem.ID), float64(consumedItem.CalculateSID()))
 		} else {
-			ctx.Connection.SendCallback("onAddCharactorSlot", h.itemDTO(consumedItem))
+			h.sendSlotUpdate(ctx, h.itemDTO(consumedItem))
 		}
 	}
 
@@ -347,7 +347,7 @@ func (h *Handler) ChangeLevel(ctx *rtmp.RPCContext, args []interface{}) (interfa
 		newEquipment = updatedEquipment
 	}
 
-	ctx.Connection.SendCallback("onAddCharactorSlot", h.itemDTO(newEquipment))
+	h.sendSlotUpdate(ctx, h.itemDTO(newEquipment))
 
 	if oldWasEquipped {
 		if updatedChar, charErr := h.charService.GetByID(ctx.Context, characterID); charErr == nil && updatedChar != nil {

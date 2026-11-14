@@ -18,6 +18,7 @@ import (
 )
 
 type petBagTestPetService struct {
+	quality            int
 	templateIDs        []int
 	pets               []*domainpet.Pet
 	err                error
@@ -48,6 +49,7 @@ func (s *petBagTestPetService) ContractPets(ctx context.Context, charID int64, t
 }
 
 func (s *petBagTestPetService) ContractPetsWithQuality(ctx context.Context, charID int64, templateIDs []int, quality int) ([]*domainpet.Pet, error) {
+	s.quality = quality
 	return s.ContractPets(ctx, charID, templateIDs)
 }
 

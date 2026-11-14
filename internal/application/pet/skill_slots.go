@@ -73,6 +73,8 @@ func (s *Service) OpenPetSkill(ctx context.Context, charID int64, petID int64, s
 	if char == nil {
 		return nil, pkgerrors.ErrNotFound
 	}
+	copyChar := *char
+	char = &copyChar
 
 	cost, err := s.petSkillOpenCost(p, slot)
 	if err != nil {
@@ -81,6 +83,7 @@ func (s *Service) OpenPetSkill(ctx context.Context, charID int64, petID int64, s
 
 	originalGold := char.Gold
 	originalGoldBind := char.GoldBind
+	originalPMExp := char.PMExp
 
 	currencyType, remaining, err := consumePetSlotCurrency(char, cost)
 	if err != nil {
@@ -94,6 +97,7 @@ func (s *Service) OpenPetSkill(ctx context.Context, charID int64, petID int64, s
 	if err := s.petRepo.Save(ctx, p); err != nil {
 		char.Gold = originalGold
 		char.GoldBind = originalGoldBind
+		char.PMExp = originalPMExp
 		if rollbackErr := s.charRepo.Update(ctx, char); rollbackErr != nil {
 			s.logger.Error("Failed to rollback pet skill slot currency",
 				zap.Int64("character_id", charID),

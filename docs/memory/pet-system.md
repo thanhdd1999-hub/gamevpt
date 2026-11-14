@@ -1,5 +1,9 @@
 # Pet System
 
+## Pet Skill Upgrade RPC (2026-11-14)
+
+The Flash button calls petUpSkill(petId,slot), which was previously unregistered. The new handler/service resolve the unique next skill with the same CodeName and level+1. Level 1→2 consumes one upgrade material; level 2→3 consumes three; level 3 is the cap. Quality tiers 1/2/3 select material 1365/1366/1367. A sufficient single stack in the regular or pet-item bag is required; split stacks are currently rejected safely. Owner, slot, skill chain, quality and material are validated before mutation. The upgraded pet is saved before material consumption, with pet compensation if consumption fails. Callbacks update material stack/removal, the skill property, and derived pet properties. Regression tests cover success, caps, ownership, missing materials and save/consume failures.
+
 ## Overview
 
 Properties: petList, activePetObject, contractPet, evolutionPetObject, petMaxNum. Auto-battle settings: bs2/4/6/8/10 (skill/item assignments), p6/7/8/9 (HP/MP thresholds). Auto-battle logic checks thresholds before choosing heal, defense, or attack.

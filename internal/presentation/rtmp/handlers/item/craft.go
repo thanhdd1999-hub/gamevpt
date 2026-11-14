@@ -850,7 +850,7 @@ func (h *Handler) NewMake(ctx *rtmp.RPCContext, args []interface{}) (interface{}
 			return map[string]interface{}{"flag": false}, nil
 		}
 
-		ctx.Connection.SendCallback("onAddCharactorSlot", h.itemDTO(selection.item))
+		h.sendSlotUpdate(ctx, h.itemDTO(selection.item))
 	}
 
 	if !success {
@@ -928,7 +928,7 @@ func (h *Handler) NewMake(ctx *rtmp.RPCContext, args []interface{}) (interface{}
 		}
 	}
 
-	ctx.Connection.SendCallback("onAddCharactorSlot", h.itemDTO(resultItem))
+	h.sendSlotUpdate(ctx, h.itemDTO(resultItem))
 	h.broadcastOrangeEquipmentNotice(crafterName, resultItem)
 
 	h.logger.Info("Item crafted successfully",

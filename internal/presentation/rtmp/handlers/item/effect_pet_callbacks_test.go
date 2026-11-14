@@ -113,3 +113,27 @@ func TestSendUpdatedPetCallbacks_MultipleUpdatedPets(t *testing.T) {
 		t.Fatalf("second pet arg[0] = %#v, want float64(22)", recorder.calls[1].args[0])
 	}
 }
+
+func TestSendUpdatedPetCallbacksRefreshesLearnedSkillImmediately(t *testing.T) {
+	pet := &domainpet.Pet{ID: 42, Life: 7500, Property: map[string]interface{}{"skill1": 7002, "skill2": 7011, "skill3": 7014}}
+	recorder := &handlerCallbackRecorder{}
+	sendUpdatedPetCallbacks(recorder, []*domainpet.Pet{pet})
+	learned, props := false, false
+	for _, call := range recorder.calls {
+		if call.method == "onAddPet" {
+			t.Fatal("must not add an existing pet again")
+		}
+		if call.method == "onUpdatePet" && len(call.args) == 3 && call.args[1] == "skill3" && call.args[2] == 7014 {
+			learned = true
+		}
+		if call.method == "onRefreshPetProp" {
+			payload := call.args[0].(map[string]interface{})
+			if payload["id"] == int64(42) && payload["s"] != nil {
+				props = true
+			}
+		}
+	}
+	if !learned || !props {
+		t.Fatalf("missing skill/props refresh: %v", recorder.calls)
+	}
+}

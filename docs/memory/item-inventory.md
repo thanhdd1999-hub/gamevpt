@@ -1,5 +1,19 @@
 # Item & Inventory System
 
+## Local Expansion Book Fix (2026-11-14)
+
+### Gift-Type Context Guard
+
+The choose-one pet handler previously accepted any selectable gift description and searched creature names without requiring a pet context. Wing gift 3376 mentions Ác Ma and accidentally matched creature 504, granting a pet. CanHandle now requires the same explicit pet context as other pet bags. Unimplemented non-pet choice gifts are rejected without consuming the package. This prevents an incorrect pet grant; it does not implement the wing reward selection UI.
+
+The follow-up purchase audit also closed no-op consumption in the default and generic buff fallbacks. Skill/formula books require a successful presentation-layer preparation step (`UseContext.BookPrepared`) before consumption; actual life-skill and recipe learning still runs through the existing prepare/finalize/rollback handlers. Unknown templates and unsupported effects fail without changing the stack. These guards preserve inventory rather than pretending to implement missing gameplay.
+
+Type-500 scrolls previously returned a success message and consumed items without applying any effect. Explicit handling now expands regular bag pages with template 325 (max 7), bank pages with 324 (max 5), and carried-pet slots with 326 (runtime `pet.MaxPets`, currently 180). Page setters synchronize the derived 30-slot capacities; pet capacity keeps PetSlots synchronized. The existing character update path persists cached or offline state. Effects carry a minimal `character_updates` map, emitted as `onUPP`; unchanged capacity keys are omitted to avoid false notices. At capacity the book is retained and an explicit message is shown. Other type-500 scrolls are rejected without consumption until their effect is implemented, including pet-bank expansion book 2092.
+
+Bulk use now rejects nonpositive counts and permits only supported HP/MP potion and food types (501/502), because the bulk response only carries recovery effects. The RTMP handler validates argument types and bounds instead of using panic-prone type assertions. Regression tests cover consumption, unchanged-capacity limits, unsupported scroll preservation, bulk expansion rejection, and malformed bulk arguments.
+
+The surrounding audit also found broader preexisting incompleteness: generic skill-book handling (type 505) only generates a message outside the separate life-skill pre-handler, and the default effect fallback can consume an unsupported item without an effect. These are separate implementation gaps, not covered by the expansion patch. Item removal and character persistence are separate writes; database-failure atomicity is not guaranteed by this patch.
+
 ## Item-Use Target Gate
 
 The Flash item-use contract uses `useType` only as a target gate (`1` character, `2` pet, `3` either, `4` not directly usable) before branching by item `type` and special item IDs. The choose-one package panel contract is `useItem` -> server callback `itemMultitoSel({packItemList:{idx:{ti,ii,n,q}}, packGetNum}, sid)` -> client RPC `selMultiItemByIdx(packItemSid, selectedIdx)`; the responder returns `0` to close the panel or a positive remaining count to keep it open. Current server support matches this choose-one flow, but generic item use still misses full server-side `useType` target enforcement, general pet-target consumable routing, paid package `usePackageByMoney` / `onUsePackageByMoney`, and `onItemUseCallBack` confirmation wiring. See `docs/research/2026-04-25_02_ITEM_USE_PANEL_CONTRACT_RESEARCH.md`.
@@ -225,3 +239,50 @@ Special item RPCs: `changeNameByCard`, `changeCharSex`, `useGoodCard`, `useWeddi
 Temp bag rewards: effect handlers can set `TempBagItems` in result, dispatched as `warnTemporaryBag` callback.
 
 Research: `docs/research/2026-04-08_01_USEITEM_HYBRID_ARCHITECTURE_RESEARCH.md`
+
+## Local consumable repair 2026-11-14
+
+Confirmed useItem(1,-1,67) at08:20:54 consumed template2846 with no effect. This is an MP reserve refill, not a direct MP potion; template I1/I2 are zero. Added explicit reserve mappings:2846 MP50000,2847 HP50000,2037 MP1000000,2038 HP1000000. Stored pipe-string in Character.PMProcessData.localBloodBag through existing persistence; login ep now reflects stored reserve rather than constant zeros. Capacity10million per reserve, reject overflow without consumption.
+
+useBloodBag previously granted fixed500HP for free. Now debit actual character HP/MP reserves against missing effective vitals outside active battle, emit currentHp/currentMp and reserve update. Does not resurrect. Pet reserve recovery and buyBloodBag purchasing remain outside this patch.
+
+Direct HP/MP potion and food handlers now retain items when no HP/MP is restored. Bulk recovery consumes only effective doses; reserve refills are single-use only to preserve callback semantics. Unsupported consumables remain explicitly rejected, never fake success.
+
+Tests: application/item, domain/character, item/combat RTMP handlers pass; targeted vet and server build pass. Auth suite has daily VIP experience test failure14900 vs15400, unrelated to ep payload change. Live Flash reserve refresh still needs validation. Refunded exactly one bound2846 from confirmed log, receipt in outputs/VPT-Local/HOAN-TUI-MP-2026-11-14.json (workspace root).
+
+Wire verification: main SWF onUPP method97056 reads payload.ep and calls Core.setBloodBag (multinames73446/73445); onUPP {ep:pipeString} is confirmed, not inferred. UI walkthrough remains pending.
+
+
+## Pet fusion incident 2026-11-14
+RPCpetJoin(20,21,24,18,10) at08:43:49 consumedpet21throughlegacy2petAbsorbPet; UIalwaysfailsbecausehandlerreturns success/pet insteadofflag/pid/grow. Verifiedpet21absent, otherfourremain. Temporarilydisablednormalandseniorfusionentrypointswith explicitnotice; no mutations through theseRPCs. Full5petfusionnotyetimplemented. Do not silentlyrestore guessedpetdata or labelguardasfullfix. Official Go guide /bai-viet/dung-hop/4287.html plusclient confirms4subpetsconsumedbothoutcomes, nextcolourrandomgrowth, rates100/80/50/30. Roll distributionnotpublished.
+
+
+## Live item cache repair 2026-11-14
+Craft,mix,star,gem,resolve and equipmentprefix/level/element/bind/soul handlers now send onCreateItemInstance(dto) before onAddCharactorSlot(dto) through sharedsendSlotUpdate. This hydrates changedremainingstacks/newproducts before slotpresentation. No businesslogic changes, no fusionunlock. Handler tests pass includingorderingtest; liveFlashverification pending. Fullyconsumedstacks retain existingonDelCharactorSlot pathway pendingcontractaudit.
+
+
+Equipment distinction: DTOtype18 uses onChangeEquiptInst, ordinaryDTOtype28 uses onCreateItemInstance, bothbeforeonAddCharactorSlot. Regressiontestcoversboth. ABCauditconfirmedonDelCharactorSlot(itemID,SID) currentargumentorderisvalid; SID=-2 lookupalternativeexistsbutnotintroduced.
+
+
+## Local fusion and star repair — 2026-11-14
+
+Normal pet fusion now accepts all five instance IDs, validates ownership/uniqueness/species/element/colour/rest state and secondary equipment/souls before rolling. Rates100/80/50/30 from Flash and official Go guide. Success moves growth into next colour; failure preserves the main snapshot; both valid outcomes consume all four secondary pets. Senior accepts one ID array, exact blue4..10/purple4..16 tables and item3014 cost (blue1, purple2 per secondary). Both use atomic Postgres functions and update cache only after commit. onDelPet + onUpdatePet + derived property refresh and exact responder flag/pid/grow keep Flash current. Legacy two-pet handlers removed from RPC flow.
+
+Material/jewel upgrades share validated exchange and return every touched product stack. Valid random failures consume inputs; grant/consume errors compensate. Materialrate=count*20, orangematerial=count*6+activeVIPright8; jewel=count*20 and nextJewelTid. Fully consumed bag source temporarily reserves a tempbag slot so full bags can use freed space. Limitation: compensation is not DB crash-atomic, and requires free temp slot on this success path.
+
+Equipment star rate index corrected to target star. Production cache/Postgres path atomically updates equipment and consumes stones. Wing star accepts feather2906, returns equSlotId/itemSlotId/num/upgradeNum/flag, uses official failure penalty table (0,0,1,2,3,4,4,5,0,0). Random failures consume stones; technical commit errors do not commit either change.
+
+WingJoin and WingSeniorJoin added with exact Flash request/result structures. Validate bag equipment kind13/position22, unique inputs, same colour; normal allows different wing templates with5point penalty each; senior requires same template. Normal purple VIPright9 supported. Atomic wing function commits main and all secondary deletions. Main ID retained. Success uses next colour and local equipment property generator, preserves main stars. Failure preserves main.
+
+Compatibility limits: original Go server random distribution is unpublished. Pet growth uses uniform hundredth steps within documented colour ranges; wing stats use this repo equipment quality generator. Birthday event overrides/special seasonal rate buffs are not enabled by this patch. Wing experience growth/recast/bind/hole/feather operations beyond fusion and star have not been certified here. Do not claim whole game or exact original server compatibility.
+
+Validation: focused normal/senior pet tests pass; full application/item, item/pet RTMP handlers, cache, Postgres packages pass; affected vet and server build pass. SQL rollback fixtures validate pet, seniorpet with split3014 stacks, wing and star success/technical rollback; no fixture data persists. Full pet/auth suites retain unrelated baseline failures, not represented as green. Live Flash walkthrough pending after deployment.
+
+Sources: https://vuaphapthuat.go.vn/bai-viet/dung-hop/4287.html ; https://vuaphapthuat.go.vn/bai-viet/cuong-hoa-canh/4018.html ; read-only Flash PetFuncPanel/PetAdvancedPanel/WingFunc/EquipTFuncPanel and GamePredef.
+
+## Advanced fusion stale material slot 2026-11-14
+Screenshotshows3014stack22with13secondarypetsrequiring26, butserverinventoryinstance118has32. No seniorPetJoinRPCreceived; Flash advancedJoin early-returns when petItem.stackNum<itemNeedNum. Added onUpChaSlotStackNum(id,stackNum,sid) aftercacheprime/slotpushinitemhelperandshoppurchaseupdates to refreshfunctionslotquantities. Handler tests pass. Livevalidationpending. Wishbookcandidates3012and3755bothlackItemAwardrows; do not publishunusableboxes. Userprice/currencyquestionpending.
+
+
+## Advanced pet button actual blocker 2026-11-14
+Secondreporthad32visible3014vs26requiredandstillnoRPC. ClientadvancedJoin dereferencesselectedpet.petData.soulInfo.data. DBgenericgdc39replywasminimalandmissedsoulInfo; addedpetservicewiringtogamedatahandlerandownedlivegdc39singleDTOpathusingGetPetDetail.ToDetailDTO. RegressiontestexercisesRPCpathandrequiresnon-null soulInfo.data,binded,property. Earlierstackcallbackfixalonewasinsufficient. Buildandtests passed; liveFlashvalidationpending.

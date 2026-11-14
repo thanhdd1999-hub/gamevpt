@@ -36,6 +36,17 @@ func (h *Handler) GetDataConfig(ctx *rtmp.RPCContext, args []interface{}) (inter
 	if err != nil {
 		return nil, err
 	}
+	if tableType == 39 && recordID > 0 && h.petService != nil {
+		charID, e := strconv.ParseInt(ctx.CharacterID, 10, 64)
+		if e != nil {
+			return nil, pkgerrors.ErrUnauthorized
+		}
+		p, e := h.petService.GetPetDetail(ctx.Context, charID, int64(recordID))
+		if e != nil {
+			return nil, e
+		}
+		return map[string]interface{}{"type": 39, "index": recordID, "data": p.ToDetailDTO()}, nil
+	}
 
 	tableName, ok := models.TableIDToName[tableType]
 	if !ok {

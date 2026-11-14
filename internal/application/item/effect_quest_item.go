@@ -28,6 +28,12 @@ func (h *questItemEffectHandler) CanHandle(tpl *models.ItemTemplateTemplate) boo
 }
 
 func (h *questItemEffectHandler) Apply(ctx context.Context, uctx *UseContext, char *character.Character, it *domainitem.Item, tpl *models.ItemTemplateTemplate) (*ItemEffectResult, error) {
+	if tpl.ID == 6859 {
+		return h.service.applyHMLVPendant(ctx, uctx, char, it)
+	}
+	if tpl.ID == 3755 {
+		return classicSkillBox(h.gameData)
+	}
 	if h.awardHandler != nil && h.awardHandler.CanHandle(tpl) {
 		return h.awardHandler.Apply(ctx, uctx, char, it, tpl)
 	}

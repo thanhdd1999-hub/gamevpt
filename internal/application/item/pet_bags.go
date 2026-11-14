@@ -40,7 +40,13 @@ func (s *Service) tryApplyPetBagEffect(ctx context.Context, char *character.Char
 		return nil, true, err
 	}
 
-	pets, err := s.petService.ContractPets(ctx, char.ID, templateIDs)
+	var pets []*domainpet.Pet
+	quality := parseDescriptionQuality(tpl.Description)
+	if quality > 0 {
+		pets, err = s.petService.ContractPetsWithQuality(ctx, char.ID, templateIDs, quality)
+	} else {
+		pets, err = s.petService.ContractPets(ctx, char.ID, templateIDs)
+	}
 	if err != nil {
 		return nil, true, err
 	}
@@ -75,10 +81,28 @@ func isPetSummonBoxTemplate(tpl *models.ItemTemplateTemplate) bool {
 		return false
 	}
 	text := normalizePetSummonText(tpl.Name + " " + tpl.Description)
+	if tpl.ID == 6861 && strings.TrimSpace(normalizePetSummonText(tpl.Name)) == "tui qua huyen minh linh vu" {
+		return true
+	}
 	return strings.Contains(text, " pet ")
 }
 
 func (s *Service) resolvePetBagTemplateIDs(tpl *models.ItemTemplateTemplate) ([]int, error) {
+	if tpl.ID == 6861 && strings.TrimSpace(normalizePetSummonText(tpl.Name)) == "tui qua huyen minh linh vu" {
+		var id int
+		for _, creature := range s.gameDataRec.GetAllCreatures() {
+			if creature != nil && strings.TrimSpace(normalizePetSummonText(creature.Name)) == "huyen minh linh vu" {
+				if id != 0 {
+					return nil, pkgerrors.ErrCannotUseItem
+				}
+				id = int(creature.ID)
+			}
+		}
+		if id <= 0 {
+			return nil, pkgerrors.ErrCannotUseItem
+		}
+		return []int{id}, nil
+	}
 	text := normalizePetSummonText(tpl.Name + " " + tpl.Description)
 	if text == "" {
 		return nil, pkgerrors.ErrCannotUseItem
@@ -313,6 +337,9 @@ func (h *petBagEffectHandler) CanHandle(tpl *models.ItemTemplateTemplate) bool {
 }
 
 func (h *petBagEffectHandler) Apply(ctx context.Context, uctx *UseContext, char *character.Character, it *domainitem.Item, tpl *models.ItemTemplateTemplate) (*ItemEffectResult, error) {
+	if tpl.ID == 6861 {
+		return h.service.applyHMLVGift(ctx, char, it, tpl)
+	}
 	raw, _, err := h.service.tryApplyPetBagEffect(ctx, char, tpl)
 	if err != nil {
 		return nil, err

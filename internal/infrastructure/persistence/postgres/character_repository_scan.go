@@ -112,6 +112,9 @@ func hydrateCharacterState(char *character.Character, petGuardDataJSON []byte, b
 		char.PMProcessData = map[string]interface{}{}
 	}
 
+	if value, ok := char.PMProcessData["localNpPnt"].(float64); ok && value >= 0 {
+		char.NpPoint = int(value)
+	}
 	char.NormalizeAttributePoints()
 	char.RefreshRuntimeStats()
 }

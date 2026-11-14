@@ -1,5 +1,11 @@
 # PM / VIP System
 
+## System Gold Spending (2026-11-14)
+
+Active VIP characters now accrue 1 PM EXP per gold actually spent by the repaired NPC/system/cart/VIP-shop/Send Combine purchase paths and pet-slot/skill-slot purchases. Bound gold is excluded. The domain AwardSystemGoldSpend helper updates the same character copy that is saved with payment, so failed purchases do not award EXP. The client receives addOrMinusPmExp with type=1, pnt=delta, nExp=total and pmLevel, plus the scene-level update. Purchasing VIP cards retains its existing separate EXP calculation and is not awarded twice by this helper.
+
+PetOpenSlot no longer sends a hardcoded extra 'Mất ... kim phiếu' system message after onMinusMoney; the native callback already displays the actual gold/goldBind currency. Authoritative rule: https://vuaphapthuat.go.vn/bai-viet/cap-do-cach-thang-cap-tui-qua-thang/4610.html. This patch covers the explicitly repaired paths, not every gold deduction throughout the server.
+
 ## PM/VIP Persist And Sync
 
 PM state is now persisted on `player.characters` and mirrored into `public.accounts.vip_level`.

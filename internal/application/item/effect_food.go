@@ -52,5 +52,9 @@ func (h *foodEffectHandler) Apply(ctx context.Context, uctx *UseContext, char *c
 		}
 	}
 
+	if result.HPHealed == 0 && result.MPRestored == 0 {
+		result.ConsumeItem = false
+		result.Message = "Không có HP/MP được hồi phục; không tiêu hao vật phẩm."
+	}
 	return result, nil
 }

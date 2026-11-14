@@ -6,6 +6,7 @@ package combat
 import (
 	"strconv"
 
+	"mcgame-server/internal/domain/character"
 	"mcgame-server/internal/infrastructure/rtmp"
 	pkgerrors "mcgame-server/pkg/errors"
 
@@ -72,23 +73,37 @@ func (h *Handler) UseBloodBag(ctx *rtmp.RPCContext, args []interface{}) (interfa
 		return rtmp.ErrorToResponse(err), nil
 	}
 
-	const hpRestore = 500
-	char.CurrentHP += hpRestore
-	if char.CurrentHP > char.MaxHP {
-		char.CurrentHP = char.MaxHP
+	if h.combatService != nil {
+		if battle, err := h.combatService.GetPlayerBattle(characterID); err == nil && battle.IsActive() {
+			return nil, nil
+		}
 	}
-
-	if err := h.charService.Save(ctx.Context, char); err != nil {
-		h.logger.Warn("Failed to save character after use blood bag", zap.Error(err))
+	updated := *char
+	values := updated.BloodBag()
+	maxHP, maxMP := char.MaxHP, char.MaxMP
+	if h.itemService != nil {
+		computed := *char
+		computed.RecalculateStats()
+		computed.ApplyEquipmentBonuses(h.itemService.AggregateEquipmentStats(ctx.Context, characterID))
+		maxHP, maxMP = computed.MaxHP, computed.MaxMP
+	}
+	hpRestore := character.RecoverFromBloodBag(&updated.CurrentHP, maxHP, &values[0])
+	mpRestore := character.RecoverFromBloodBag(&updated.CurrentMP, maxMP, &values[1])
+	raw := updated.SetBloodBag(values)
+	if err := h.charService.Save(ctx.Context, &updated); err != nil {
+		return rtmp.ErrorToResponse(err), nil
 	}
 
 	ctx.Connection.SendCallback("onUPP", map[string]interface{}{
-		"hp": char.CurrentHP,
+		"currentHp": updated.CurrentHP,
+		"currentMp": updated.CurrentMP,
+		"ep":        raw,
 	})
 
 	h.logger.Info("Use blood bag",
 		zap.Int64("character_id", characterID),
-		zap.Int("hp_restored", hpRestore))
+		zap.Int("hp_restored", hpRestore),
+		zap.Int("mp_restored", mpRestore))
 
 	return map[string]interface{}{
 		"success": true,

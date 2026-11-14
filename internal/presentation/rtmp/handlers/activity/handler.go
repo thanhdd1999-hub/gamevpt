@@ -48,26 +48,27 @@ var onlineRewardSteps = []OnlineRewardConfig{
 }
 
 type Handler struct {
-	itemService      *appitem.Service
-	characterRepo    domainchar.Repository
-	statFeatureRepo  domainfeature.Repository
-	offlineService   *appactivity.OfflineDelegationService
-	premiumService   *appactivity.PremiumService
-	bossDailyService *appactivity.BossDailyService
-	dailyActService  *appactivity.DailyActService
-	combatService    *appcombat.Service
-	battleService    *appbattle.Service
-	buffService      *appbuff.Service
-	gameData         *gamedata.Manager
-	explorerMedalSvc *appexplorermedal.Service
-	ppveService      *apppet.PPVEService
-	logger           *zap.Logger
-	rewardStates     sync.Map
-	sendCombineMu    sync.Mutex
-	sendCombineBuy   map[int64]map[string]int
-	rtmpServer       *rtmp.Server
-	startedActSvc    *appactivity.StartedActivityService
-	eventBus         *appevents.Bus
+	itemService           *appitem.Service
+	characterRepo         domainchar.Repository
+	statFeatureRepo       domainfeature.Repository
+	offlineService        *appactivity.OfflineDelegationService
+	premiumService        *appactivity.PremiumService
+	bossDailyService      *appactivity.BossDailyService
+	dailyActService       *appactivity.DailyActService
+	combatService         *appcombat.Service
+	battleService         *appbattle.Service
+	buffService           *appbuff.Service
+	gameData              *gamedata.Manager
+	explorerMedalSvc      *appexplorermedal.Service
+	ppveService           *apppet.PPVEService
+	logger                *zap.Logger
+	rewardStates          sync.Map
+	sendCombineMu         sync.Mutex
+	sendCombinePurchaseMu sync.Mutex
+	sendCombineBuy        map[int64]map[string]int
+	rtmpServer            *rtmp.Server
+	startedActSvc         *appactivity.StartedActivityService
+	eventBus              *appevents.Bus
 }
 
 func NewHandler(itemService *appitem.Service, logger *zap.Logger) *Handler {

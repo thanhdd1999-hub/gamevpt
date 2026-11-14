@@ -6,7 +6,9 @@ package activity
 import (
 	"strconv"
 	"strings"
+	"time"
 
+	appitem "mcgame-server/internal/application/item"
 	domainchar "mcgame-server/internal/domain/character"
 	domainitem "mcgame-server/internal/domain/item"
 	"mcgame-server/internal/infrastructure/rtmp"
@@ -44,6 +46,8 @@ func (h *Handler) BuySendCombine(ctx *rtmp.RPCContext, args []interface{}) (inte
 	if !exists {
 		return nil, pkgerrors.ErrInvalidInput
 	}
+	h.sendCombinePurchaseMu.Lock()
+	defer h.sendCombinePurchaseMu.Unlock()
 
 	currentBuyNum := h.getSendCombineBuyCount(characterID, activityID)
 	if currentBuyNum >= activity.Limit {
@@ -63,13 +67,18 @@ func (h *Handler) BuySendCombine(ctx *rtmp.RPCContext, args []interface{}) (inte
 		return nil, err
 	}
 
-	currencyKey, currencyTotal, currencyTotalFloat, err := applySendCombineCost(character, activity.Currency, totalCost)
+	updatedCharacter := *character
+	currencyKey, currencyTotal, currencyTotalFloat, err := applySendCombineCost(&updatedCharacter, activity.Currency, totalCost)
 	if err != nil {
 		h.sendSendCombineNotice(ctx, "onRedMsg", sendCombineMsgNotEnoughCurrency)
 		return currentBuyNum, nil
 	}
+	pmDelta := int64(0)
+	if currencyKey == "gold" {
+		pmDelta = updatedCharacter.AwardSystemGoldSpend(totalCost)
+	}
 
-	addedItems := make([]interface{}, 0, len(selectedAwards))
+	rewards := make([]appitem.BagReward, 0, len(selectedAwards))
 	for _, award := range selectedAwards {
 		templateID, parseErr := strconv.Atoi(award.ItemID)
 		if parseErr != nil || templateID <= 0 {
@@ -84,34 +93,29 @@ func (h *Handler) BuySendCombine(ctx *rtmp.RPCContext, args []interface{}) (inte
 
 		itemType := h.resolveSendCombineItemType(templateID, award.ItemType)
 		isBound := award.Binded == 1
-		addedItem, addErr := h.itemService.AddItemWithBind(ctx.Context, characterID, templateID, itemType, award.StackNum, isBound)
-		if addErr != nil {
-			h.logger.Warn("BuySendCombine: failed to add reward item",
-				zap.Uint32("conn_id", ctx.ConnID),
-				zap.Int64("character_id", characterID),
-				zap.String("activity_id", activityID),
-				zap.Int("template_id", templateID),
-				zap.Error(addErr))
-			h.sendSendCombineNotice(ctx, "onRedMsg", sendCombineMsgInventoryIssue)
-			return currentBuyNum, nil
-		}
-
-		addedItems = append(addedItems, addedItem)
+		rewards = append(rewards, appitem.BagReward{TemplateID: templateID, ItemType: itemType, Count: award.StackNum, IsBound: isBound})
 	}
 
-	if err := h.characterRepo.Update(ctx.Context, character); err != nil {
-		return nil, err
+	addedItems, grantErr := h.itemService.GrantBagRewards(ctx.Context, characterID, rewards, func() error {
+		return h.characterRepo.Update(ctx.Context, &updatedCharacter)
+	})
+	if grantErr != nil {
+		h.logger.Error("BuySendCombine: purchase failed", zap.Int64("character_id", characterID), zap.Error(grantErr))
+		h.sendSendCombineNotice(ctx, "onRedMsg", sendCombineMsgInventoryIssue)
+		return currentBuyNum, nil
 	}
 
 	newBuyNum := h.incrementSendCombineBuyCount(characterID, activityID)
 
 	if ctx.Connection != nil {
 		for _, added := range addedItems {
-			_ = ctx.Connection.SendCallback("onAddItem", added)
-			_ = ctx.Connection.SendCallback("onAddCharactorSlot", added)
+			payload := h.itemService.BuildClientItemDTO(added)
+			_ = ctx.Connection.SendCallback("onCreateItemInstance", payload)
+			_ = ctx.Connection.SendCallback("onAddCharactorSlot", payload)
 		}
 		_ = ctx.Connection.SendCallback("onAddMoney", float64(characterID), currencyKey, float64(-totalCost), currencyTotalFloat)
 		_ = ctx.Connection.SendCallback("onUPP", map[string]interface{}{currencyKey: currencyTotal})
+		rtmputils.SendPMGoldSpendUpdate(ctx, pmDelta, updatedCharacter.PMExp, updatedCharacter.CurrentPMLevel(time.Now()))
 		rtmputils.CheckBagCapacityWarning(ctx.Context, ctx.Connection, h.itemService, characterID)
 	}
 
@@ -128,23 +132,16 @@ func (h *Handler) BuySendCombine(ctx *rtmp.RPCContext, args []interface{}) (inte
 }
 
 func (h *Handler) resolveSendCombineItemType(templateID int, awardItemType int) domainitem.ItemType {
+	if awardItemType == 19 {
+		return domainitem.ItemTypeEquipment
+	}
 	if h.gameData != nil {
-		if h.gameData.GetEquipment(templateID) != nil {
-			return domainitem.ItemTypeEquipment
-		}
 		if itemTemplate := h.gameData.GetItem(templateID); itemTemplate != nil {
 			itemKind := int(itemTemplate.Kind)
-			if itemKind == 1 {
-				return domainitem.ItemTypeEquipment
-			}
 			if itemKind == 6 || itemKind == 14 {
 				return domainitem.ItemTypeMaterial
 			}
 		}
-	}
-
-	if awardItemType == 19 {
-		return domainitem.ItemTypeEquipment
 	}
 
 	return domainitem.ItemTypeConsumable

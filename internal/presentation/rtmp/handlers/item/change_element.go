@@ -124,7 +124,7 @@ func (h *Handler) ChangeElement(ctx *rtmp.RPCContext, args []interface{}) (inter
 	if deleted {
 		ctx.Connection.SendCallback("onDelCharactorSlot", float64(consumedItem.ID), float64(consumedItem.CalculateSID()))
 	} else {
-		ctx.Connection.SendCallback("onAddCharactorSlot", h.itemDTO(consumedItem))
+		h.sendSlotUpdate(ctx, h.itemDTO(consumedItem))
 	}
 
 	charDeductMoney(char, changeElementMoneyCost)
@@ -195,7 +195,7 @@ func (h *Handler) SureChangeElement(ctx *rtmp.RPCContext, args []interface{}) (i
 		return map[string]interface{}{"f": "false"}, nil
 	}
 
-	ctx.Connection.SendCallback("onAddCharactorSlot", h.itemDTO(updatedEquipment))
+	h.sendSlotUpdate(ctx, h.itemDTO(updatedEquipment))
 
 	if updatedEquipment.IsEquipped() {
 		if updatedChar, charErr := h.charService.GetByID(ctx.Context, characterID); charErr == nil && updatedChar != nil {

@@ -45,6 +45,8 @@ func (h *Handler) RegisterHandlers(dispatcher *rtmp.RPCDispatcher) {
 	dispatcher.Register("getVipShopConfig", h.GetVipShopConfig)
 	dispatcher.Register("getVipShopCharConfig", h.GetVipShopCharConfig)
 	dispatcher.Register("getLimitShopConfig", h.GetLimitShopConfig)
+	dispatcher.Register("getLimitTimeShop", h.GetLimitTimeShop)
+	dispatcher.Register("buyLimitTimeItem", h.BuyLimitTimeItem)
 	dispatcher.Register("getRemainShopConfig", h.GetRemainShopConfig)
 	dispatcher.Register("buyAmountItemClient", h.BuyAmountItemClient)
 	dispatcher.Register("buyItemClient", h.BuyItemClient)

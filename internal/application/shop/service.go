@@ -46,6 +46,7 @@ type shopService struct {
 	vipShopRepo VIPShopRepository
 	logger      *zap.Logger
 	vipMu       sync.Mutex
+	purchaseMu  sync.Mutex
 	vipDynamic  []vipShopDynamicEntry
 }
 
@@ -74,6 +75,11 @@ func (s *shopService) SetItemService(svc *item.Service) {
 // BuyItem is the main entry point for buying items from NPC shops.
 // It supports basic currencies (Money, Gold) AND special currencies via PType1/PType2.
 func (s *shopService) BuyItem(ctx context.Context, characterID int64, shopSlotID int, amount int) (*BuyResult, error) {
+	if amount <= 0 || amount > 1000000 {
+		return nil, errors.New("invalid purchase quantity")
+	}
+	s.purchaseMu.Lock()
+	defer s.purchaseMu.Unlock()
 	if s.charRepo == nil {
 		return nil, errors.New("character repository not initialized")
 	}
@@ -88,10 +94,15 @@ func (s *shopService) BuyItem(ctx context.Context, characterID int64, shopSlotID
 	if err != nil {
 		return nil, err
 	}
+	charCopy := *char
+	char = &charCopy
 
 	shopSlot, err := s.resolveSystemShopSlot(shopSlotID)
 	if err != nil {
 		return nil, err
+	}
+	if int(shopSlot.Type) != 19 && int(shopSlot.Type) != 29 {
+		return nil, errors.New("unsupported shop item table")
 	}
 
 	// 2. Identify Item Type & Template
@@ -126,8 +137,8 @@ func (s *shopService) BuyItem(ctx context.Context, characterID int64, shopSlotID
 
 		// Determine internal ItemType based on ItemTemplate Kind
 		itType = pkgitem.ItemTypeConsumable
-		if itemKind == 1 {
-			itType = pkgitem.ItemTypeEquipment
+		if itemKind == 6 || itemKind == 14 {
+			itType = pkgitem.ItemTypeMaterial
 		}
 	}
 
@@ -162,7 +173,9 @@ func (s *shopService) BuyItem(ctx context.Context, characterID int64, shopSlotID
 		// For special currencies, newMoney depends on the currency type
 		// This is handled by DeductCurrency, but we need to get the updated value
 		// For now, set to 0 as special currencies may not have a direct "newMoney" field
-		newMoney = 0
+		if value, ok := char.GetGameCurrencyTotal(currencyType); ok {
+			newMoney = int64(value)
+		}
 	} else if shopGold > 0 {
 		if int(shopSlot.Gt) == 1 {
 			currencyType = 4
@@ -233,15 +246,11 @@ func (s *shopService) BuyItem(ctx context.Context, characterID int64, shopSlotID
 
 	// Bind item if purchased with GoldBind (currencyType = 3 || currencyType == 1)
 	binded := (currencyType == 3 || currencyType == 1)
-	beforeStacks, err := s.snapshotPurchaseBagStacks(ctx, characterID, int(shopSlot.ItemID), itType, binded)
-	if err != nil {
-		return nil, err
+	pmDelta := int64(0)
+	if currencyType == 4 && shopSlot.PType1 <= 0 {
+		pmDelta = char.AwardSystemGoldSpend(cost)
 	}
-	addedItem, err := s.itemService.AddItemWithBindAndColor(ctx, characterID, int(shopSlot.ItemID), itType, amount, binded, colorCode)
-	if err != nil {
-		return nil, err
-	}
-	addedItemDTOs, err := s.changedPurchaseBagDTOs(ctx, characterID, int(shopSlot.ItemID), itType, binded, beforeStacks)
+	addedItem, addedItemDTOs, err := s.grantPurchase(ctx, char, int(shopSlot.ItemID), itType, amount, binded, colorCode)
 	if err != nil {
 		return nil, err
 	}
@@ -250,11 +259,9 @@ func (s *shopService) BuyItem(ctx context.Context, characterID int64, shopSlotID
 	}
 
 	// 5. Save Character State (Money/Points)
-	if err := s.charRepo.Update(ctx, char); err != nil {
-		return nil, err
-	}
-
 	return &BuyResult{
+		PMExpDelta:   pmDelta,
+		Balances:     shopBalances(char, int(shopSlot.PType1), int(shopSlot.PType2)),
 		NewMoney:     newMoney, // In Special Currency case, client might ignore this or need specific field update
 		Cost:         cost,
 		CurrencyType: currencyType,
@@ -273,6 +280,11 @@ func (s *shopService) BuyItem(ctx context.Context, characterID int64, shopSlotID
 }
 
 func (s *shopService) BuySystemItem(ctx context.Context, characterID int64, shopSlotID int, amount int) (*BuyResult, error) {
+	if amount <= 0 || amount > 1000000 {
+		return nil, errors.New("invalid purchase quantity")
+	}
+	s.purchaseMu.Lock()
+	defer s.purchaseMu.Unlock()
 	// BuySystemItem handles purchases from system shops (e.g., SystemShopPanel, ConsumPanel)
 	// Only supports: Gold (Vàng/Kim phiếu) and Points (Điểm thưởng)
 
@@ -290,10 +302,18 @@ func (s *shopService) BuySystemItem(ctx context.Context, characterID int64, shop
 	if err != nil {
 		return nil, err
 	}
+	charCopy := *char
+	char = &charCopy
 
 	shopSlot, err := s.resolveSystemShopSlot(shopSlotID)
 	if err != nil {
 		return nil, err
+	}
+	if int(shopSlot.Type) != 19 && int(shopSlot.Type) != 29 {
+		return nil, errors.New("unsupported shop item table")
+	}
+	if shopSlot.Point <= 0 && shopSlot.Gold <= 0 {
+		return nil, errors.New("item has no valid system shop price")
 	}
 
 	// 2. Identify Item Type & Template
@@ -313,8 +333,8 @@ func (s *shopService) BuySystemItem(ctx context.Context, characterID int64, shop
 		itemName = itemTpl.Name
 		itemKind = int(itemTpl.Kind)
 		itType = pkgitem.ItemTypeConsumable
-		if itemKind == 1 {
-			itType = pkgitem.ItemTypeEquipment
+		if itemKind == 6 || itemKind == 14 {
+			itType = pkgitem.ItemTypeMaterial
 		}
 	} else {
 		// --- EQUIPMENT ---
@@ -339,11 +359,11 @@ func (s *shopService) BuySystemItem(ctx context.Context, characterID int64, shop
 		currencyType = 0 // Special: Points (not a standard currency type)
 		cost = int64(shopSlot.Point) * int64(amount)
 
-		if char.Honor < int(cost) {
+		if char.ExPoint < int(cost) {
 			return nil, errors.New("not enough points")
 		}
-		char.Honor -= int(cost)
-		newMoney = int64(char.Honor)
+		char.ExPoint -= int(cost)
+		newMoney = int64(char.ExPoint)
 	} else {
 		// Using Gold (Kim phiếu/Vàng)
 		// System shop ONLY accepts Gold, not Silver
@@ -388,15 +408,11 @@ func (s *shopService) BuySystemItem(ctx context.Context, characterID int64, shop
 
 	// Bind item if purchased with GoldBind (currencyType = 3)
 	binded := (currencyType == 3)
-	beforeStacks, err := s.snapshotPurchaseBagStacks(ctx, characterID, int(shopSlot.ItemID), itType, binded)
-	if err != nil {
-		return nil, err
+	pmDelta := int64(0)
+	if currencyType == 4 {
+		pmDelta = char.AwardSystemGoldSpend(cost)
 	}
-	addedItem, err := s.itemService.AddItemWithBindAndColor(ctx, characterID, int(shopSlot.ItemID), itType, amount, binded, colorCode)
-	if err != nil {
-		return nil, err
-	}
-	addedItemDTOs, err := s.changedPurchaseBagDTOs(ctx, characterID, int(shopSlot.ItemID), itType, binded, beforeStacks)
+	addedItem, addedItemDTOs, err := s.grantPurchase(ctx, char, int(shopSlot.ItemID), itType, amount, binded, colorCode)
 	if err != nil {
 		return nil, err
 	}
@@ -405,10 +421,6 @@ func (s *shopService) BuySystemItem(ctx context.Context, characterID int64, shop
 	}
 
 	// 5. Save Character State
-	if err := s.charRepo.Update(ctx, char); err != nil {
-		return nil, err
-	}
-
 	// Determine table type for response
 	itemTableType := 29
 	if int(shopSlot.Type) != 29 {
@@ -416,6 +428,8 @@ func (s *shopService) BuySystemItem(ctx context.Context, characterID int64, shop
 	}
 
 	return &BuyResult{
+		PMExpDelta:   pmDelta,
+		Balances:     shopBalances(char),
 		NewMoney:     newMoney,
 		Cost:         cost,
 		CurrencyType: currencyType,
@@ -434,21 +448,11 @@ func (s *shopService) BuySystemItem(ctx context.Context, characterID int64, shop
 }
 
 func (s *shopService) SellItem(ctx context.Context, characterID int64, inventoryItemID int64) (*SellResult, error) {
-	// Mock: assume sell is successful
-	return &SellResult{
-		NewMoney: 1234567,
-	}, nil
+	return nil, errors.New("Bán vật phẩm qua shop này chưa được hỗ trợ; vật phẩm và tiền được giữ nguyên")
 }
 
 func (s *shopService) ExchangeItem(ctx context.Context, characterID int64, creditID string, amount int) (*ExchangeResult, error) {
-	// Mock: assume exchange is successful
-	return &ExchangeResult{
-		NewPoints: 500,
-		ItemData: map[string]interface{}{
-			"t": 19,   // TBL_EQUIPT_TEMPLATE
-			"i": 2001, // Mock equipment ID
-		},
-	}, nil
+	return nil, errors.New("Đổi vật phẩm qua shop này chưa được hỗ trợ; vật phẩm và điểm được giữ nguyên")
 }
 
 func (s *shopService) RepairItems(ctx context.Context, characterID int64, repairType int) (*RepairResult, error) {
@@ -533,11 +537,21 @@ func (s *shopService) SetCharacterRepository(repo character.Repository) {
 }
 
 func (s *shopService) BuySystemItemMulti(ctx context.Context, characterID int64, purchases []PurchaseRequest) (*BuySystemItemMultiResult, error) {
+	if s.charRepo == nil || s.gameDataRec == nil || s.itemService == nil {
+		return nil, errors.New("shop is not initialized")
+	}
+	if len(purchases) == 0 || len(purchases) > 100 {
+		return nil, errors.New("invalid cart size")
+	}
+	s.purchaseMu.Lock()
+	defer s.purchaseMu.Unlock()
 	// 1. Load Character
 	char, err := s.charRepo.FindByID(ctx, characterID)
 	if err != nil {
 		return nil, err
 	}
+	charCopy := *char
+	char = &charCopy
 
 	// 2. Prepare Transaction Data
 	var itemsToAdd []struct {
@@ -563,12 +577,18 @@ func (s *shopService) BuySystemItemMulti(ctx context.Context, characterID int64,
 
 	// 3. Validation & Cost Calculation Loop
 	for _, req := range purchases {
-		if req.Amount <= 0 {
-			continue
+		if req.Amount <= 0 || req.Amount > 1000000 {
+			return nil, errors.New("invalid purchase quantity")
 		}
 		shopSlot, err := s.resolveSystemShopSlot(req.ShopSlotID)
 		if err != nil {
 			return nil, err
+		}
+		if int(shopSlot.Type) != 19 && int(shopSlot.Type) != 29 {
+			return nil, errors.New("unsupported shop item table")
+		}
+		if shopSlot.Point <= 0 && shopSlot.Gold <= 0 {
+			return nil, errors.New("item has no valid system shop price")
 		}
 
 		// Get template based on shopSlot.Type
@@ -607,12 +627,16 @@ func (s *shopService) BuySystemItemMulti(ctx context.Context, characterID int64,
 		} else {
 			// Gold Item
 			cost = int64(shopSlot.Gold) * int64(req.Amount)
-			if goldType == 3 {
+			itemGoldType := goldType
+			if int(shopSlot.Gt) == 1 {
+				itemGoldType = 4
+			}
+			if itemGoldType == 3 {
 				totalGoldBind += cost
 			} else {
 				totalGold += cost
 			}
-			pType = goldType
+			pType = itemGoldType
 		}
 
 		itemsToAdd = append(itemsToAdd, struct {
@@ -628,7 +652,7 @@ func (s *shopService) BuySystemItemMulti(ctx context.Context, characterID int64,
 	}
 
 	// 4. Check Balances
-	if int64(char.Honor) < totalPoint {
+	if int64(char.ExPoint) < totalPoint {
 		return nil, errors.New("not enough points")
 	}
 	if char.GoldBind < totalGoldBind {
@@ -640,18 +664,21 @@ func (s *shopService) BuySystemItemMulti(ctx context.Context, characterID int64,
 
 	// 5. Execution: Deduct & Add Items
 	// Deduct
-	char.Honor -= int(totalPoint)
+	char.ExPoint -= int(totalPoint)
 	char.GoldBind -= totalGoldBind
 	char.Gold -= totalGold
+	pmDelta := char.AwardSystemGoldSpend(totalGold)
 
 	var resultItems []map[string]interface{}
-	var resultDTOs []map[string]interface{}
+	var rewards []item.BagReward
 
 	for _, item := range itemsToAdd {
 		// Add to inventory
 		itType := pkgitem.ItemTypeConsumable
-		if item.ItemKind == 1 {
+		if int(item.Slot.Type) == 19 {
 			itType = pkgitem.ItemTypeEquipment
+		} else if item.ItemKind == 6 || item.ItemKind == 14 {
+			itType = pkgitem.ItemTypeMaterial
 		}
 
 		// Calculate ColorCode from Quality: color = quality / 5 (round up)
@@ -659,22 +686,11 @@ func (s *shopService) BuySystemItemMulti(ctx context.Context, characterID int64,
 
 		// Bind item if purchased with GoldBind (currencyType = 3)
 		binded := (item.PType == 3)
-		beforeStacks, err := s.snapshotPurchaseBagStacks(ctx, char.ID, int(item.Slot.ItemID), itType, binded)
-		if err != nil {
-			return nil, err
-		}
-		addedItem, err := s.itemService.AddItemWithBindAndColor(ctx, char.ID, int(item.Slot.ItemID), itType, item.Amount, binded, colorCode)
-		if err != nil {
-			return nil, fmt.Errorf("failed to add item %d: %v", int(item.Slot.ItemID), err)
-		}
-		addedItemDTOs, err := s.changedPurchaseBagDTOs(ctx, char.ID, int(item.Slot.ItemID), itType, binded, beforeStacks)
-		if err != nil {
-			return nil, err
-		}
+		rewards = append(rewards, newCartBagReward(int(item.Slot.ItemID), itType, item.Amount, binded, colorCode))
 
 		displayName := item.ItemName
 		if itType == pkgitem.ItemTypeEquipment {
-			displayName = pkgitem.FormatEquipmentDisplayName(displayName, addedItem.ColorCode)
+			displayName = pkgitem.FormatEquipmentDisplayName(displayName, colorCode)
 		}
 
 		// Determine table type for response
@@ -684,21 +700,24 @@ func (s *shopService) BuySystemItemMulti(ctx context.Context, characterID int64,
 		}
 
 		resultItems = append(resultItems, map[string]interface{}{
-			"i":  addedItem.TemplateID,
+			"i":  int(item.Slot.ItemID),
 			"q":  item.Amount,
 			"s":  "",
-			"c":  pkgitem.PopupNoticeColor(itType, addedItem.ColorCode),
+			"c":  pkgitem.PopupNoticeColor(itType, colorCode),
 			"t":  itemTableType,
 			"n":  displayName,
 			"tt": item.ItemKind,
 		})
-		resultDTOs = append(resultDTOs, addedItemDTOs...)
 	}
 
 	// 6. Save Character
-	if err := s.charRepo.Update(ctx, char); err != nil {
+	changed, err := s.itemService.GrantBagRewards(ctx, char.ID, rewards, func() error {
+		return s.charRepo.Update(ctx, char)
+	})
+	if err != nil {
 		return nil, err
 	}
+	resultDTOs := s.itemService.BuildClientItemDTOList(changed)
 
 	var newMoney int64
 	var currencyType int
@@ -709,15 +728,17 @@ func (s *shopService) BuySystemItemMulti(ctx context.Context, characterID int64,
 		newMoney = char.GoldBind
 		currencyType = 3
 	} else {
-		newMoney = int64(char.Honor)
+		newMoney = int64(char.ExPoint)
 		currencyType = 0
 	}
 
 	return &BuySystemItemMultiResult{
+		PMExpDelta:    pmDelta,
 		Success:       true,
 		Items:         resultItems,
 		AddedItemDTOs: resultDTOs,
 		NewMoney:      newMoney,
 		CurrencyType:  currencyType,
+		Balances:      shopBalances(char),
 	}, nil
 }

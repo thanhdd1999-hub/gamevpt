@@ -1095,10 +1095,7 @@ func (s *Service) UseItem(ctx context.Context, char *character.Character, itemID
 	}
 
 	if tpl == nil {
-		// Fallback for logic without template, strictly check generic consumable flag
-		if !it.IsConsumable() {
-			return nil, nil, pkgerrors.ErrCannotUseItem
-		}
+		return nil, nil, pkgerrors.ErrCannotUseItem
 	} else {
 		// strict check based on template
 		// Check Level Requirement
@@ -1168,6 +1165,9 @@ func (s *Service) applyItemEffect(ctx context.Context, uctx *UseContext, char *c
 	if int(tpl.UseType) == 4 {
 		return nil, pkgerrors.ErrCannotUseItem
 	}
+	if uctx != nil && uctx.BookPrepared {
+		return NewEffectResult(), nil
+	}
 
 	itemType := int(tpl.Type)
 	if handler, ok := s.typeHandlers[itemType]; ok {
@@ -1189,6 +1189,9 @@ func (s *Service) applyItemEffect(ctx context.Context, uctx *UseContext, char *c
 
 func (s *Service) effectResultToMap(r *ItemEffectResult) map[string]interface{} {
 	result := map[string]interface{}{}
+	if len(r.CharacterUpdates) > 0 {
+		result["character_updates"] = r.CharacterUpdates
+	}
 	if r.HPHealed > 0 {
 		result["hp_healed"] = r.HPHealed
 	}
@@ -1242,6 +1245,9 @@ func (s *Service) effectResultToMap(r *ItemEffectResult) map[string]interface{} 
 
 // UseMultiItem uses multiple instances of a stackable item
 func (s *Service) UseMultiItem(ctx context.Context, char *character.Character, slotID int64, count int, targetType int, petID int64) (map[string]interface{}, error) {
+	if count <= 0 {
+		return nil, pkgerrors.ErrInvalidArgs
+	}
 	// Find item by slot ID (could be item ID or slot index)
 	it, err := s.itemRepo.FindByID(ctx, slotID)
 	if err != nil {
@@ -1279,8 +1285,16 @@ func (s *Service) UseMultiItem(ctx context.Context, char *character.Character, s
 		tpl = s.gameDataRec.GetItem(it.TemplateID)
 	}
 
+	if tpl == nil || (int(tpl.Type) != 501 && int(tpl.Type) != 502) {
+		return nil, pkgerrors.ErrCannotUseItem
+	}
+	if _, _, reserveItem := bloodBagItem(int(tpl.ID)); reserveItem {
+		return nil, pkgerrors.ErrCannotUseItem
+	}
+
 	totalHPHealed := 0
 	totalMPRestored := 0
+	consumed := 0
 
 	for i := 0; i < count; i++ {
 		if tpl != nil {
@@ -1288,13 +1302,17 @@ func (s *Service) UseMultiItem(ctx context.Context, char *character.Character, s
 			if err != nil {
 				return nil, err
 			}
+			if !effectResult.ConsumeItem {
+				break
+			}
+			consumed++
 			totalHPHealed += effectResult.HPHealed
 			totalMPRestored += effectResult.MPRestored
 		}
 	}
 
 	// Update stack count
-	it.StackCount -= count
+	it.StackCount -= consumed
 	if it.StackCount <= 0 {
 		if err := s.itemRepo.Delete(ctx, it.ID); err != nil {
 			return nil, err
@@ -1314,7 +1332,7 @@ func (s *Service) UseMultiItem(ctx context.Context, char *character.Character, s
 		zap.Int("mp_restored", totalMPRestored))
 
 	result := map[string]interface{}{
-		"consumed":  count,
+		"consumed":  consumed,
 		"remaining": it.StackCount,
 		"item_id":   it.ID,
 	}

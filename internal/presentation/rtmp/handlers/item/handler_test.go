@@ -273,7 +273,7 @@ func buildItemTestHandlerWithRepo(t *testing.T, char *domainchar.Character, item
 	itemService := appitem.NewService(itemRepo, logger)
 
 	manager := gamedata.NewManager(nil, logger)
-	consumableTpl := models.ItemTemplateTemplate{ID: 1001, Kind: 1, Type: 1, UseType: 3, I1: 0, I2: 0}
+	consumableTpl := models.ItemTemplateTemplate{ID: 1001, Kind: 5, Type: 501, UseType: 3, I1: 10, I2: 0}
 	consumableRaw, err := json.Marshal(consumableTpl)
 	if err != nil {
 		t.Fatalf("marshal item template: %v", err)

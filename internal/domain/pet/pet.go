@@ -203,11 +203,11 @@ func (p *Pet) RecalculateStats() {
 	attInt := creatureDataFloat(p.CreatureData, "attIntelligence") + levelBonus
 	attEng := creatureDataFloat(p.CreatureData, "attEnergy") + levelBonus
 
-	aptStr := creatureDataFloat(p.CreatureData, "aptStrength")
-	aptAgi := creatureDataFloat(p.CreatureData, "aptAgility")
-	aptStam := creatureDataFloat(p.CreatureData, "aptStamina")
-	aptInt := creatureDataFloat(p.CreatureData, "aptIntelligence")
-	aptEng := creatureDataFloat(p.CreatureData, "aptEnergy")
+	aptStr := p.persistedAptitude(p.AptStrength, "aptStrength") + creatureDataFloat(p.Property, "aptStrengthIllusion")
+	aptAgi := p.persistedAptitude(p.AptAgility, "aptAgility") + creatureDataFloat(p.Property, "aptAgilityIllusion")
+	aptStam := p.persistedAptitude(p.AptStamina, "aptStamina") + creatureDataFloat(p.Property, "aptStaminaIllusion")
+	aptInt := p.persistedAptitude(p.AptIntelligence, "aptIntelligence") + creatureDataFloat(p.Property, "aptIntelligenceIllusion")
+	aptEng := p.persistedAptitude(p.AptEnergy, "aptEnergy") + creatureDataFloat(p.Property, "aptEnergyIllusion")
 
 	profile := stats.Profile{
 		SeedHP:          20,
@@ -292,10 +292,20 @@ func (p *Pet) RecalculateStats() {
 
 func (p *Pet) petGrowthScale() float64 {
 	baseGrowth := p.GrowRate + p.GrowRateAdd
+	if p.UpgradeNum >= 9 && p.UpgradeNum <= 12 {
+		baseGrowth += []float64{0.1, 0.3, 0.35, 0.4}[p.UpgradeNum-9]
+	}
 	if p.usesCreaturePetFormula() {
 		return baseGrowth
 	}
 	return baseGrowth * float64(p.Level)
+}
+
+func (p *Pet) persistedAptitude(value int, key string) float64 {
+	if value > 0 {
+		return float64(value)
+	}
+	return creatureDataFloat(p.CreatureData, key)
 }
 
 func (p *Pet) petPerLevelBaseStatBonus() float64 {
@@ -480,11 +490,11 @@ func (p *Pet) ToDTO() map[string]interface{} {
 	dto["aptEnergy"] = p.AptEnergy
 
 	// Extra Aptitudes (Root Level for direct access)
-	dto["aptStrengthEx"] = p.AptStrengthEx
-	dto["aptAgilityEx"] = p.AptAgilityEx
-	dto["aptStaminaEx"] = p.AptStaminaEx
-	dto["aptIntelligenceEx"] = p.AptIntelligenceEx
-	dto["aptEnergyEx"] = p.AptEnergyEx
+	dto["aptStrengthEx"] = creatureDataFloat(p.Property, "aptStrengthIllusion")
+	dto["aptAgilityEx"] = creatureDataFloat(p.Property, "aptAgilityIllusion")
+	dto["aptStaminaEx"] = creatureDataFloat(p.Property, "aptStaminaIllusion")
+	dto["aptIntelligenceEx"] = creatureDataFloat(p.Property, "aptIntelligenceIllusion")
+	dto["aptEnergyEx"] = creatureDataFloat(p.Property, "aptEnergyIllusion")
 
 	// Skills handling (skill1 - skill15)
 	for i := 1; i <= 15; i++ {
@@ -512,6 +522,9 @@ func (p *Pet) ToDTO() map[string]interface{} {
 	prop["aptStamina"] = p.AptStamina
 	prop["aptIntelligence"] = p.AptIntelligence
 	prop["aptEnergy"] = p.AptEnergy
+	for _, key := range []string{"aptStrengthEx", "aptAgilityEx", "aptStaminaEx", "aptIntelligenceEx", "aptEnergyEx"} {
+		prop[key] = dto[key]
+	}
 
 	// Evolution Aptitudes (0 to prevent NaN, logic can follow later)
 	prop["aptStrengthEvolution"] = 0
@@ -523,6 +536,7 @@ func (p *Pet) ToDTO() map[string]interface{} {
 	prop["state"] = state
 
 	dto["property"] = prop
+	dto["envoInfo"] = p.EvolutionInfo()
 
 	// Potential Info (PI) Block
 	dto["pi"] = map[string]interface{}{
@@ -553,7 +567,10 @@ func (p *Pet) ToDTO() map[string]interface{} {
 	}
 
 	return map[string]interface{}{
-		"data": dto,
+		"data":     dto,
+		"pi":       dto["pi"],
+		"soulInfo": dto["soulInfo"],
+		"envoInfo": dto["envoInfo"],
 	}
 }
 

@@ -95,7 +95,7 @@ func getCurrencyKey(currencyType int) string {
 	case 64:
 		return "mcbeans"
 	case 0:
-		return "honor"
+		return "exPoint"
 	default:
 		return "money"
 	}

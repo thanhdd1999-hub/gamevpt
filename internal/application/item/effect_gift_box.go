@@ -18,10 +18,14 @@ import (
 	"mcgame-server/internal/gamedata/models"
 )
 
-var descriptionQualityPattern = regexp.MustCompile(`phẩm chất\s+(\d+(?:[.,]\d+)?)`)
+var descriptionQualityPattern = regexp.MustCompile(`(?i)phẩm\s+chất\s+(\d+(?:[.,]\d+)?)`)
+var descriptionColorQualityPattern = regexp.MustCompile(`(?i)(?:xanh\s+dương|xanh\s+lam|xanh\s+lá|trắng|lục|lam|tím|cam)\s+(\d+[.,]\d+)\b`)
 
 func parseDescriptionQuality(description string) int {
 	m := descriptionQualityPattern.FindStringSubmatch(description)
+	if len(m) < 2 {
+		m = descriptionColorQualityPattern.FindStringSubmatch(description)
+	}
 	if len(m) < 2 {
 		return 0
 	}
@@ -42,10 +46,7 @@ type giftBoxEffectHandler struct {
 }
 
 func (h *giftBoxEffectHandler) CanHandle(tpl *models.ItemTemplateTemplate) bool {
-	if tpl == nil || int(tpl.UseType) != 1 {
-		return false
-	}
-	if int(tpl.Type) != 508 && int(tpl.Type) != 550 {
+	if !isPetSummonBoxTemplate(tpl) {
 		return false
 	}
 	text := normalizePetSummonText(tpl.Name + " " + tpl.Description)

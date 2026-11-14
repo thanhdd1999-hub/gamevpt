@@ -7,6 +7,7 @@ import (
 	"fmt"
 	appshop "mcgame-server/internal/application/shop"
 	"mcgame-server/internal/infrastructure/rtmp"
+	rtmputils "mcgame-server/internal/presentation/rtmp/utils"
 	"strconv"
 
 	"go.uber.org/zap"
@@ -33,8 +34,7 @@ func (h *Handler) BuyAmountItemClient(ctx *rtmp.RPCContext, args []interface{}) 
 	msg := fmt.Sprintf("Mua thành công x%d! Mất %d %s.", amount, res.Cost, currencyName)
 	_ = ctx.Connection.SendCallback("onBlueMsg", msg)
 
-	currencyKey := getCurrencyKey(res.CurrencyType)
-	_ = ctx.Connection.SendCallback("onUPP", map[string]interface{}{currencyKey: res.NewMoney})
+	sendPurchaseWalletUpdates(ctx, res)
 	_ = ctx.Connection.SendCallback("onAddItem", res.ItemData)
 	sendPurchaseSlotUpdates(ctx, res)
 
@@ -66,8 +66,7 @@ func (h *Handler) BuyItemClient(ctx *rtmp.RPCContext, args []interface{}) (inter
 	_ = ctx.Connection.SendCallback("onAddItem", res.ItemData)
 	sendPurchaseSlotUpdates(ctx, res)
 
-	currencyKey := getCurrencyKey(res.CurrencyType)
-	_ = ctx.Connection.SendCallback("onUPP", map[string]interface{}{currencyKey: res.NewMoney})
+	sendPurchaseWalletUpdates(ctx, res)
 
 	h.checkQuestUpdates(ctx, charID)
 
@@ -97,8 +96,7 @@ func (h *Handler) BuySystemItemClient(ctx *rtmp.RPCContext, args []interface{}) 
 	_ = ctx.Connection.SendCallback("onAddItem", res.ItemData)
 	sendPurchaseSlotUpdates(ctx, res)
 
-	currencyKey := getCurrencyKey(res.CurrencyType)
-	_ = ctx.Connection.SendCallback("onUPP", map[string]interface{}{currencyKey: res.NewMoney})
+	sendPurchaseWalletUpdates(ctx, res)
 
 	h.checkQuestUpdates(ctx, charID)
 
@@ -116,7 +114,8 @@ func (h *Handler) SellItem(ctx *rtmp.RPCContext, args []interface{}) (interface{
 
 	res, err := h.shopService.SellItem(ctx.Context, charID, inventoryItemID)
 	if err != nil {
-		return nil, err
+		_ = ctx.Connection.SendCallback("onRedMsg", err.Error())
+		return false, nil
 	}
 
 	_ = ctx.Connection.SendCallback("onUPP", map[string]interface{}{"money": res.NewMoney})
@@ -136,7 +135,8 @@ func (h *Handler) ExchangeItem(ctx *rtmp.RPCContext, args []interface{}) (interf
 
 	res, err := h.shopService.ExchangeItem(ctx.Context, charID, creditID, amount)
 	if err != nil {
-		return nil, err
+		_ = ctx.Connection.SendCallback("onRedMsg", err.Error())
+		return 0, nil
 	}
 
 	_ = ctx.Connection.SendCallback("onAddItem", res.ItemData)
@@ -244,11 +244,17 @@ func (h *Handler) BuySystemItemMulti(ctx *rtmp.RPCContext, args []interface{}) (
 		_ = ctx.Connection.SendCallback("onAddItem", itemData)
 	}
 	for _, itemDTO := range res.AddedItemDTOs {
+		_ = ctx.Connection.SendCallback("onCreateItemInstance", itemDTO)
 		_ = ctx.Connection.SendCallback("onAddCharactorSlot", itemDTO)
 	}
 
-	currencyKey := getCurrencyKey(res.CurrencyType)
-	_ = ctx.Connection.SendCallback("onUPP", map[string]interface{}{currencyKey: res.NewMoney})
+	if len(res.Balances) > 0 {
+		_ = ctx.Connection.SendCallback("onUPP", res.Balances)
+		rtmputils.SendPMGoldSpendUpdate(ctx, res.PMExpDelta, res.Balances["pmExp"], res.Balances["pmLevel"])
+	} else {
+		currencyKey := getCurrencyKey(res.CurrencyType)
+		_ = ctx.Connection.SendCallback("onUPP", map[string]interface{}{currencyKey: res.NewMoney})
+	}
 
 	h.checkQuestUpdates(ctx, charID)
 

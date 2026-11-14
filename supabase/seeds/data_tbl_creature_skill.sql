@@ -4,10 +4,10 @@ SET session_replication_role = replica;
 -- PostgreSQL database dump
 --
 
--- \restrict 2upeQ7MNEPHXzEk8MvllVEzeDxMWN64WzR2y1wX7z35OiDccbDUQfxvJAth9qQr
+-- \restrict lawzLVoelj7vgoHdwfTV8Ic5km1TwpuLOs09xwLd0h65l8anTReTpiBClp4qAo9
 
 -- Dumped from database version 17.6
--- Dumped by pg_dump version 17.6
+-- Dumped by pg_dump version 17.11
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
@@ -22,7 +22,7 @@ SET client_min_messages = warning;
 SET row_security = off;
 
 --
--- Data for Name: data_tbl_creature_skill; Type: TABLE DATA; Schema: data; Owner: -
+-- Data for Name: data_tbl_creature_skill; Type: TABLE DATA; Schema: data; Owner: postgres
 --
 
 INSERT INTO "data"."data_tbl_creature_skill" ("id", "cid", "position", "sid") VALUES
@@ -1025,8 +1025,7 @@ INSERT INTO "data"."data_tbl_creature_skill" ("id", "cid", "position", "sid") VA
 	(1556, 702, NULL, 3840),
 	(1557, 703, NULL, 3841),
 	(1558, 704, NULL, 3842),
-	(1559, 705, NULL, 3843);
-INSERT INTO "data"."data_tbl_creature_skill" ("id", "cid", "position", "sid") VALUES
+	(1559, 705, NULL, 3843),
 	(1560, 706, NULL, 3844),
 	(1561, 690, NULL, 3977),
 	(1563, 690, NULL, 3978),
@@ -1887,14 +1886,56 @@ INSERT INTO "data"."data_tbl_creature_skill" ("id", "cid", "position", "sid") VA
 	(2304, 1892, NULL, 3494),
 	(2313, 1892, NULL, 3494),
 	(5166, 2292, NULL, 7047),
-	(5167, 2292, NULL, 7050);
+	(5167, 2292, NULL, 7050),
+	(5168, 2281, NULL, 7002);
+
+
+--
+-- Name: data_tbl_boss_loot_id_seq; Type: SEQUENCE SET; Schema: data; Owner: postgres
+--
+
+SELECT pg_catalog.setval('"data"."data_tbl_boss_loot_id_seq"', 1, false);
+
+
+--
+-- Name: data_tbl_heiyaoshi_area_attribute_id_seq; Type: SEQUENCE SET; Schema: data; Owner: postgres
+--
+
+SELECT pg_catalog.setval('"data"."data_tbl_heiyaoshi_area_attribute_id_seq"', 1, false);
+
+
+--
+-- Name: data_tbl_heiyaoshi_area_id_seq; Type: SEQUENCE SET; Schema: data; Owner: postgres
+--
+
+SELECT pg_catalog.setval('"data"."data_tbl_heiyaoshi_area_id_seq"', 1, false);
+
+
+--
+-- Name: data_tbl_heiyaoshi_full_buff_id_seq; Type: SEQUENCE SET; Schema: data; Owner: postgres
+--
+
+SELECT pg_catalog.setval('"data"."data_tbl_heiyaoshi_full_buff_id_seq"', 1, false);
+
+
+--
+-- Name: data_tbl_heiyaoshi_point_id_seq; Type: SEQUENCE SET; Schema: data; Owner: postgres
+--
+
+SELECT pg_catalog.setval('"data"."data_tbl_heiyaoshi_point_id_seq"', 1, false);
+
+
+--
+-- Name: data_tbl_heiyaoshi_point_link_id_seq; Type: SEQUENCE SET; Schema: data; Owner: postgres
+--
+
+SELECT pg_catalog.setval('"data"."data_tbl_heiyaoshi_point_link_id_seq"', 1, false);
 
 
 --
 -- PostgreSQL database dump complete
 --
 
--- \unrestrict 2upeQ7MNEPHXzEk8MvllVEzeDxMWN64WzR2y1wX7z35OiDccbDUQfxvJAth9qQr
+-- \unrestrict lawzLVoelj7vgoHdwfTV8Ic5km1TwpuLOs09xwLd0h65l8anTReTpiBClp4qAo9
 
-
-SET session_replication_role = origin;
+RESET ALL;

@@ -97,8 +97,9 @@ func (h *Handler) UseItem(ctx *rtmp.RPCContext, args []interface{}) (interface{}
 	}
 
 	uctx := &appitem.UseContext{
-		TargetType: targetType,
-		TargetID:   targetID,
+		BookPrepared: pendingBookUse != nil,
+		TargetType:   targetType,
+		TargetID:     targetID,
 	}
 	if targetID > 0 && h.gameData != nil {
 		if tpl := h.gameData.GetItem(it.TemplateID); tpl != nil && int(tpl.Type) == 507 {
@@ -108,6 +109,10 @@ func (h *Handler) UseItem(ctx *rtmp.RPCContext, args []interface{}) (interface{}
 	usedItem, result, err := h.itemService.UseItem(ctx.Context, char, it.ID, uctx)
 	if err != nil {
 		h.rollbackBookUse(ctx.Context, characterID, pendingBookUse)
+		if pkgerrors.Is(err, pkgerrors.ErrCannotUseItem) {
+			ctx.Connection.SendCallback("onSystemMidMsgOrNote", "Vật phẩm chưa được hỗ trợ sử dụng trực tiếp; không tiêu hao vật phẩm.")
+			return nil, nil
+		}
 		if pkgerrors.Is(err, pkgerrors.ErrInsufficientLevel) {
 			ctx.Connection.SendCallback("onSystemMidMsgOrNote", "Cấp độ không đủ!")
 			return nil, nil
@@ -178,6 +183,7 @@ func (h *Handler) UseItem(ctx *rtmp.RPCContext, args []interface{}) (interface{}
 		if usedItem.StackCount <= 0 {
 			ctx.Connection.SendCallback("onDelCharactorSlot", float64(usedItem.ID), float64(oldSID))
 		} else {
+			ctx.Connection.SendCallback("onCreateItemInstance", h.itemDTO(usedItem))
 			ctx.Connection.SendCallback("onAddCharactorSlot", h.itemDTO(usedItem))
 		}
 
@@ -207,10 +213,15 @@ func (h *Handler) UseMultiItem(ctx *rtmp.RPCContext, args []interface{}) (interf
 		return nil, pkgerrors.ErrUnauthorized
 	}
 
-	targetType := int(args[0].(float64))
-	petID := int64(args[1].(float64))
-	slotID := int64(args[2].(float64))
-	num := int(args[3].(float64))
+	targetTypeRaw, targetOK := parseFlexibleInt64(args[0])
+	petID, petOK := parseFlexibleInt64(args[1])
+	slotID, slotOK := parseFlexibleInt64(args[2])
+	numRaw, numOK := parseFlexibleInt64(args[3])
+	if !targetOK || !petOK || !slotOK || !numOK || numRaw <= 0 || numRaw > 10000 {
+		return nil, pkgerrors.ErrInvalidArgs
+	}
+	targetType := int(targetTypeRaw)
+	num := int(numRaw)
 
 	char, err := h.charService.GetByID(ctx.Context, charID)
 	if err != nil {
@@ -358,9 +369,13 @@ func (h *Handler) sendEffectCallbacks(ctx *rtmp.RPCContext, result map[string]in
 	if msg, ok := result["message"].(string); ok && msg != "" {
 		ctx.Connection.SendCallback("onSystemMidMsgOrNote", msg)
 	}
+	if updates, ok := result["character_updates"].(map[string]interface{}); ok && len(updates) > 0 {
+		ctx.Connection.SendCallback("onUPP", updates)
+	}
 	if grantedItems, ok := result["granted_items"].([]*appitem.GrantedItemResult); ok {
 		for _, gi := range grantedItems {
 			if gi.Item != nil {
+				ctx.Connection.SendCallback("onCreateItemInstance", h.itemDTO(gi.Item))
 				ctx.Connection.SendCallback("onAddCharactorSlot", h.itemDTO(gi.Item))
 			}
 		}
@@ -434,6 +449,7 @@ func (h *Handler) SelMultiItemByIdx(ctx *rtmp.RPCContext, args []interface{}) (i
 		if addErr != nil {
 			return -1, nil
 		}
+		ctx.Connection.SendCallback("onCreateItemInstance", h.itemDTO(newItem))
 		ctx.Connection.SendCallback("onAddCharactorSlot", h.itemDTO(newItem))
 	}
 

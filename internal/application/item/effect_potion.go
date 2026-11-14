@@ -23,6 +23,9 @@ func (h *potionEffectHandler) CanHandle(tpl *models.ItemTemplateTemplate) bool {
 }
 
 func (h *potionEffectHandler) Apply(ctx context.Context, uctx *UseContext, char *character.Character, it *domainitem.Item, tpl *models.ItemTemplateTemplate) (*ItemEffectResult, error) {
+	if result, ok := applyBloodBag(char, tpl); ok {
+		return result, nil
+	}
 	result := NewEffectResult()
 
 	hpAmount := int(tpl.I1)
@@ -69,5 +72,9 @@ func (h *potionEffectHandler) Apply(ctx context.Context, uctx *UseContext, char 
 		}
 	}
 
+	if result.HPHealed == 0 && result.MPRestored == 0 {
+		result.ConsumeItem = false
+		result.Message = "Không có HP/MP được hồi phục; không tiêu hao vật phẩm."
+	}
 	return result, nil
 }

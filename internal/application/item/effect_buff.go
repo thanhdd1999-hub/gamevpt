@@ -5,11 +5,11 @@ package item
 
 import (
 	"context"
-	"fmt"
 
 	"mcgame-server/internal/domain/character"
 	domainitem "mcgame-server/internal/domain/item"
 	"mcgame-server/internal/gamedata/models"
+	pkgerrors "mcgame-server/pkg/errors"
 )
 
 type buffEffectHandler struct{}
@@ -19,7 +19,5 @@ func (h *buffEffectHandler) CanHandle(tpl *models.ItemTemplateTemplate) bool {
 }
 
 func (h *buffEffectHandler) Apply(ctx context.Context, uctx *UseContext, char *character.Character, it *domainitem.Item, tpl *models.ItemTemplateTemplate) (*ItemEffectResult, error) {
-	result := NewEffectResult()
-	result.Message = fmt.Sprintf("Đã sử dụng %s", tpl.Name)
-	return result, nil
+	return nil, pkgerrors.ErrCannotUseItem
 }

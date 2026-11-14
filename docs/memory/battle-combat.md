@@ -169,3 +169,7 @@ Fixed 11 gaps between server implementation and Flash client expectations based 
 **Battle trigger RPCs**: `hitNpc` and `clickBoss` route through the combat handler. `clickNpc` is owned by the NPC handler; normal NPCs open interaction UI there, while quest-battle NPCs such as type `20` bridge back into combat by starting a standard PVE battle from the active quest kill target.
 
 Files changed: internal/domain/combat/battle.go, turn_builder.go, turn_executor.go, internal/presentation/rtmp/handlers/combat/handler.go, commands.go.
+
+## Local fix 2026-11-14: dead normal-attack target
+
+Observed battle 78f75038-8699-40ff-b79d-debe15d33c21 round 1: pet killed position 2 before character action; character emitted tid -1 despite another enemy at position 0. Normal attacks now resolve a replacement living opponent, deterministically by lowest position, only when the selected enemy is dead. Invalid/allied targets remain rejected; shared resolver, catch and skill targeting remain unchanged. Replacement passes through existing confusion/rebellion resolution. Regression test covers ID/position addressing, real damage, invalid/allied targets, and no remaining enemy. Domain combat and RTMP combat tests pass.

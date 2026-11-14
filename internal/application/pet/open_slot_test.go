@@ -5,6 +5,7 @@ package pet
 import (
 	"context"
 	"testing"
+	"time"
 
 	"mcgame-server/internal/domain/character"
 	domainpet "mcgame-server/internal/domain/pet"
@@ -103,6 +104,33 @@ func TestOpenPetSlotPrefersGoldBind(t *testing.T) {
 	}
 	if stored.Gold != 100 {
 		t.Fatalf("stored Gold = %d, want 100", stored.Gold)
+	}
+}
+
+func TestOpenPetSlotCreditsGoldVIPAndPreservesFailedState(t *testing.T) {
+	for _, mode := range []string{"gold", "bound", "save-failure"} {
+		future := time.Now().Add(time.Hour)
+		char := &character.Character{ID: 1, PetMaxNum: 6, PetSlots: 6, Gold: 100, PMExp: 47000, VIPType: 3, VIPExpiresAt: &future}
+		if mode == "bound" {
+			char.GoldBind = 100
+		}
+		repo := &openSlotCharacterRepo{characters: map[int64]*character.Character{1: char}}
+		if mode == "save-failure" {
+			repo.updateErr = pkgerrors.ErrSystemError
+		}
+		service := NewService(nil, zap.NewNop())
+		service.SetCharacterRepository(repo)
+		_, _, _, _, err := service.OpenPetSlot(context.Background(), 1)
+		wantExp := int64(47000)
+		if mode == "gold" {
+			wantExp += 20
+		}
+		if repo.characters[1].PMExp != wantExp {
+			t.Fatalf("%s PMExp=%d want%d", mode, repo.characters[1].PMExp, wantExp)
+		}
+		if mode == "save-failure" && (err == nil || repo.characters[1].Gold != 100 || repo.characters[1].PetMaxNum != 6) {
+			t.Fatal("failed expansion changed state")
+		}
 	}
 }
 

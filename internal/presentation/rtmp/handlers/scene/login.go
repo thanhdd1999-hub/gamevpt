@@ -186,7 +186,8 @@ func (h *Handler) SceneChange(ctx *rtmp.RPCContext, args []interface{}) (interfa
 	dest, err := h.sceneService.GetTeleportDestination(gateID)
 	if err != nil || dest == nil {
 		h.logger.Warn("Failed to get teleport destination", zap.Int("gate_id", gateID), zap.Error(err))
-		return nil, pkgerrors.ErrInvalidArgs
+		_ = ctx.Connection.SendCallback("onSystemMidMsgOrNote", "Cổng dịch chuyển này chưa có điểm đến hợp lệ. Vui lòng chọn cổng khác.")
+		return nil, nil
 	}
 
 	newRoomID := dest.MapID
