@@ -61,7 +61,9 @@ func (s *Service) applyPetItemAction(ctx context.Context, charID, petID, itemID 
 	}
 	next := clonePetSnapshot(stored)
 	s.enrichPet(ctx, next)
-	if !next.IsBound() || next.ClientState() != int(domainpet.PetStateRest) || next.IsFollowing || next.IsMounting {
+	state := next.ClientState()
+	eligibleState := state == int(domainpet.PetStateRest) || (kind == 4 && state == int(domainpet.PetStateBattle))
+	if !next.IsBound() || !eligibleState || next.IsFollowing || next.IsMounting {
 		return nil, pkgerrors.ErrInvalidInput
 	}
 	it, err := s.itemRepo.FindByID(ctx, itemID)
@@ -152,7 +154,7 @@ func (s *Service) applyPetItemAction(ctx context.Context, charID, petID, itemID 
 		}
 		result.Field = "growRate"
 		result.Before = next.GrowRate
-		result.After = float64(low+roll) / 100
+		result.After = math.Max(result.Before, float64(low+roll)/100)
 		applyPetGrowRate(next, result.After)
 	default:
 		return nil, pkgerrors.ErrInvalidInput

@@ -6,6 +6,10 @@ import (
 )
 
 func (h *Handler) petItemAction(ctx *rtmp.RPCContext, args []interface{}, kind int) (interface{}, error) {
+	if kind == 4 && ctx.Connection != nil && ctx.Connection.GetBattleID() != "" {
+		_ = ctx.Connection.SendCallback("onSystemSay", "Hãy kết thúc trận đấu trước khi phục sinh pet; không tiêu hao vật phẩm.")
+		return map[string]interface{}{"f": false}, nil
+	}
 	if err := requireArgs(args, 2); err != nil {
 		return map[string]interface{}{"f": false}, nil
 	}
@@ -31,7 +35,9 @@ func (h *Handler) petItemAction(ctx *rtmp.RPCContext, args []interface{}, kind i
 		result, err = h.petService.RerollPetGrowth(ctx.Context, charID, petID, itemID)
 	}
 	if err != nil {
-		_ = ctx.Connection.SendCallback("onSystemSay", "Không thể sử dụng vật phẩm này cho pet đã chọn.")
+		if ctx.Connection != nil {
+			_ = ctx.Connection.SendCallback("onSystemSay", "Không thể sử dụng vật phẩm này cho pet đã chọn; không tiêu hao vật phẩm.")
+		}
 		return map[string]interface{}{"f": false, "p": float64(petID), "i": float64(itemID)}, nil
 	}
 	it := result.Item

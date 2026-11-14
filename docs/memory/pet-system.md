@@ -252,3 +252,7 @@ Open questions (combat-resolution stub):
 - Live capture shows result arg1=-1 which client routes into `addPPLog`. The exact meaning of -1 (win/loss/replay code) is not confirmed.
 - No kp reward on floor advance is implemented yet; kp management is deferred.
 - `onUpdatePPVEPanel` and `GetPPVERank` still return partial/empty data — fixing those is a separate task.
+
+## Growth rebirth correction (2026-11-14)
+
+`petPzXsd(petID,itemInstanceID)` accepts a bound green-or-higher pet assigned for battle while outside an actual battle. The prior server-only rest-state requirement rejected the local orange pet even though Flash permitted selection. The handler rejects active battles before consumption. Reroll results below the previous growth now retain that growth, per Language.as:1714; same-colour upper bounds remain unchanged. Regression tests cover orange 2.39 with both lower and upper rolls, one-item consumption and preserved assignment/skills/stars. Live character-specific skill repairs are not included in source seeds.

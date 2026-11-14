@@ -86,6 +86,33 @@ func TestPetItemActionsCommitAndPreserveProgress(t *testing.T) {
 	}
 }
 
+func TestGrowthRebirthAcceptsAssignedBattlePetAndNeverLowersGrowth(t *testing.T) {
+	for _, improve := range []bool{false, true} {
+		s, repo := newPetItemActionTest(t, 4)
+		repo.pets[1].SetClientState(int(domainpet.PetStateBattle))
+		repo.pets[1].GrowRate = 2.39
+		result, err := s.applyPetItemAction(context.Background(), 77, 1, 201, 4, func(n int) (int, error) {
+			if improve {
+				return n - 1, nil
+			}
+			return 0, nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := 2.39
+		if improve {
+			want = 2.5
+		}
+		if result.After != want || result.Pet.GrowRate != want || result.Pet.ClientState() != int(domainpet.PetStateBattle) {
+			t.Fatalf("growth/state changed incorrectly: %+v", result)
+		}
+		if result.Item.StackCount != 1 || result.Pet.UpgradeNum != 5 || petSkillSlotValue(result.Pet, 1) != 5527 {
+			t.Fatal("incorrect consumption or lost progress")
+		}
+	}
+}
+
 func TestPetItemActionsRejectWithoutItemLoss(t *testing.T) {
 	for _, kind := range []string{"owner", "item owner", "unbound", "not rest", "wrong type", "wrong prop", "bank", "missing material", "atomic", "no atomic", "rng", "white growth"} {
 		t.Run(kind, func(t *testing.T) {
@@ -98,7 +125,7 @@ func TestPetItemActionsRejectWithoutItemLoss(t *testing.T) {
 			case "unbound":
 				repo.pets[1].SetBinded(false)
 			case "not rest":
-				repo.pets[1].SetClientState(1)
+				repo.pets[1].SetClientState(4)
 			case "wrong type":
 				if err := s.gameDataManager.GetCache().LoadTable(models.TableItemTemplate, []json.RawMessage{json.RawMessage(`{"id":1526,"type":550,"prop_type":4}`)}); err != nil {
 					t.Fatal(err)
